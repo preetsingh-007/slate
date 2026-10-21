@@ -229,7 +229,7 @@ export function Toolbar({ minimap, setMinimap, helpSignal = 0 }: { minimap: bool
       <button type="button" className="cv-btn cv-zoom" aria-label={`Zoom ${zoom}%, view options`} title="View" aria-expanded={pop === 'zoom'} onClick={() => toggle('zoom')}>
         {zoom}%
       </button>
-      <button type="button" className="cv-btn" aria-label="Settings" title="Settings" aria-expanded={pop === 'settings'} onClick={() => toggle('settings')}>
+      <button type="button" className="cv-btn" aria-label="Canvas settings" title="Canvas settings" aria-expanded={pop === 'settings'} onClick={() => toggle('settings')}>
         <Settings size={20} />
       </button>
       <button type="button" className="cv-btn" aria-label="Keyboard shortcuts and help (?)" title="Help (?)" aria-expanded={pop === 'help'} onClick={() => toggle('help')}>

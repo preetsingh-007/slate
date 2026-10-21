@@ -107,9 +107,9 @@ test.describe('ink (C6, C12, C13, C17, C18, C19)', () => {
     const after = await camera(page);
     expect(after.y).toBeGreaterThan(before.y); // the finger panned
     // the setting allows finger drawing again
-    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Canvas settings' }).click();
     await page.getByLabel(/Draw with a finger/).check();
-    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Canvas settings' }).click();
     await touch(page, [wave(100, 450)]);
     expect(await objects(page)).toHaveLength(3);
   });

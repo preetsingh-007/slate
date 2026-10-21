@@ -3,10 +3,24 @@
  * picker the gym area registers; without it, a plain text field takes a path.
  */
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import type React from 'react';
 import { X } from 'lucide-react';
 import type { Mark, MarkKind } from '../../core/model/types';
 import { cleanGymPath, MARK_KINDS } from '../../core/canvas/marks';
 import { getTopicPicker } from '../common/registries';
+
+/**
+ * Runs `save` after any pending input commits. The topic picker commits a typed path on blur;
+ * committing can change the dialog's layout, so the button keeps focus from moving on
+ * mouse-down (the click still lands on it), blurs the field itself, and saves once React has
+ * applied the commit.
+ */
+function commitThen(save: () => void) {
+  (document.activeElement as HTMLElement | null)?.blur();
+  setTimeout(save, 0);
+}
+
+const keepFocus = (e: React.MouseEvent) => e.preventDefault();
 
 export function Dialog({ title, onClose, children, actions }: { title: string; onClose(): void; children: ReactNode; actions: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -89,6 +103,8 @@ export interface MarkDraft {
 export function MarkDialog({ initial, onSave, onRemove, onClose }: { initial?: Mark; onSave(d: MarkDraft): void; onRemove?(): void; onClose(): void }) {
   const [d, setD] = useState<MarkDraft>({ kind: initial?.kind ?? 'note', topic: initial?.topic ?? '', problem: initial?.problem ?? '', comment: initial?.comment ?? '' });
   const set = (p: Partial<MarkDraft>) => setD((x) => ({ ...x, ...p }));
+  const latest = useRef(d);
+  latest.current = d;
   return (
     <Dialog
       title={initial ? 'Edit mark' : 'Mark for gym'}
@@ -104,7 +120,7 @@ export function MarkDialog({ initial, onSave, onRemove, onClose }: { initial?: M
           <button type="button" className="btn" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="btn primary" onClick={() => onSave(d)}>
+          <button type="button" className="btn primary" onMouseDown={keepFocus} onClick={() => commitThen(() => onSave(latest.current))}>
             {initial ? 'Save' : 'Mark'}
           </button>
         </>
@@ -138,6 +154,8 @@ export function TopicDialog({ title, initial, onSave, onClose }: { title: string
     setNext('');
   };
   const Picker = getTopicPicker();
+  const latest = useRef({ topics, next });
+  latest.current = { topics, next };
   return (
     <Dialog
       title={title}
@@ -150,10 +168,14 @@ export function TopicDialog({ title, initial, onSave, onClose }: { title: string
           <button
             type="button"
             className="btn primary"
-            onClick={() => {
-              const p = cleanGymPath(next);
-              onSave(p && !topics.includes(p) ? [...topics, p] : topics);
-            }}
+            onMouseDown={keepFocus}
+            onClick={() =>
+              commitThen(() => {
+                const { topics: list, next: pending } = latest.current;
+                const p = cleanGymPath(pending);
+                onSave(p && !list.includes(p) ? [...list, p] : list);
+              })
+            }
           >
             Save
           </button>

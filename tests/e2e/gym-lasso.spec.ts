@@ -18,12 +18,17 @@ interface Carried {
   size: { w: number; h: number } | undefined;
 }
 
+/** Captures that were sent: clips placed on the canvas (when it is on screen) or waiting in the carry tray. */
 const carry = (page: Page): Promise<Carried[]> =>
-  page.evaluate(() =>
-    (window as any).__slateGym.app
-      .getState()
-      .carry.map((c: any) => ({ text: c.text, source: c.source, image: !!c.image, size: c.imageSize })),
-  );
+  page.evaluate(() => {
+    const w = window as any;
+    const clips = [...w.__slate.canvases.model('main').objects()]
+      .filter((o: any) => o.kind === 'clip')
+      .sort((a: any, b: any) => a.created - b.created || (a.y - b.y))
+      .map((o: any) => ({ text: o.text, source: o.source, image: !!o.asset, size: o.natural }));
+    const tray = w.__slateGym.app.getState().carry.map((c: any) => ({ text: c.text, source: c.source, image: !!c.image, size: c.imageSize }));
+    return [...clips, ...tray];
+  });
 
 test.describe('lasso from a gym file (S1, S2, S5, S6, G7)', () => {
   test('captures the Markdown source with LaTeX, sends it to the canvas (carry tray), and returns through the source link', async ({ page }) => {
@@ -42,6 +47,7 @@ test.describe('lasso from a gym file (S1, S2, S5, S6, G7)', () => {
     await expect(preview).toBeVisible();
     await preview.getByRole('button', { name: 'Send to canvas' }).click();
     await expect(preview).toBeHidden();
+    await expect.poll(async () => (await carry(page)).length).toBe(1);
 
     const [c] = await carry(page);
     expect(c.text).toBe(
@@ -90,6 +96,7 @@ test.describe('lasso from a gym file (S1, S2, S5, S6, G7)', () => {
     const preview = pane(page).getByRole('region', { name: 'Captures' });
     await expect(preview.locator('.gym-capture')).toHaveCount(3);
     await preview.getByRole('button', { name: 'Send to canvas' }).click();
+    await expect.poll(async () => (await carry(page)).length).toBe(3);
     const caps = await carry(page);
     expect(caps.map((c) => c.text)).toEqual([
       '2. Find a basis of each eigenspace.\n3. Stack the eigenvectors as the columns of $P$.',
@@ -117,6 +124,7 @@ test.describe('lasso from a gym file (S1, S2, S5, S6, G7)', () => {
       await page.mouse.move(x, y, { steps: 5 });
     await page.mouse.up();
     await pane(page).getByRole('button', { name: 'Send to canvas' }).click();
+    await expect.poll(async () => (await carry(page)).length).toBe(1);
     const [c] = await carry(page);
     expect(c.text).toBe('The theorem holds for every *self-adjoint* operator on a finite-dimensional real inner product space.');
 

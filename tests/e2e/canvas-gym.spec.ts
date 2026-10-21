@@ -18,13 +18,14 @@ test.describe('gym hand-off on the canvas (G2, G3, G6, W4)', () => {
     const dlg = page.getByRole('dialog', { name: 'Mark for gym' });
     await dlg.getByLabel('Solution').check();
     await dlg.getByLabel('Topic (optional)').fill('math/linear-algebra/eigenvalues');
-    await dlg.getByLabel('Problem (optional)').fill('math/linear-algebra/eigenvalues/problems/01-trace.md');
+    await dlg.getByLabel('Problem (optional)').fill('math/linear-algebra/eigenvalues/problems/001-trace.md');
     await dlg.getByLabel('Comment (optional)').fill('second attempt');
     await dlg.getByRole('button', { name: 'Mark' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     let list = await marks(page);
     expect(list).toHaveLength(1);
     const m = list[0];
-    expect(m).toMatchObject({ kind: 'solution', topic: 'math/linear-algebra/eigenvalues', problem: 'math/linear-algebra/eigenvalues/problems/01-trace.md', comment: 'second attempt' });
+    expect(m).toMatchObject({ kind: 'solution', topic: 'math/linear-algebra/eigenvalues', problem: 'math/linear-algebra/eigenvalues/problems/001-trace.md', comment: 'second attempt' });
     expect(m.id).toMatch(/^[a-z0-9]+$/);
     expect(m.objects.sort()).toEqual(ids.sort());
     const flag = page.locator(`[data-mark="${m.id}"] .cv-flag`);
@@ -34,6 +35,7 @@ test.describe('gym hand-off on the canvas (G2, G3, G6, W4)', () => {
     await flag.click();
     await page.getByRole('dialog', { name: 'Edit mark' }).getByLabel('Question').check();
     await page.getByRole('dialog', { name: 'Edit mark' }).getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     list = await marks(page);
     expect(list[0].kind).toBe('question');
     expect(list[0].problem).toBe('');
@@ -50,6 +52,7 @@ test.describe('gym hand-off on the canvas (G2, G3, G6, W4)', () => {
     await withCanvas(page, `(h) => h.engine.select(['${ids[0]}'])`);
     await page.getByRole('toolbar', { name: 'Selection' }).getByRole('button', { name: 'Mark for gym' }).click();
     await page.getByRole('dialog', { name: 'Mark for gym' }).getByRole('button', { name: 'Mark' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     const second = (await marks(page)).find((x) => x.id !== m.id)!;
     await formalize(page, `- ${m.id} → ../math/linear-algebra/eigenvalues/notes.md#trace · 2026-10-22\n- ${second.id} → dismissed · 2026-10-22\n`);
     await expect(page.locator(`[data-mark="${second.id}"] .cv-flag`)).toContainText('dismissed');
@@ -61,6 +64,7 @@ test.describe('gym hand-off on the canvas (G2, G3, G6, W4)', () => {
     await withCanvas(page, `(h) => h.engine.select(${JSON.stringify(ids)})`);
     await page.getByRole('toolbar', { name: 'Selection' }).getByRole('button', { name: 'Mark for gym' }).click();
     await page.getByRole('dialog', { name: 'Mark for gym' }).getByRole('button', { name: 'Mark' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     const [m] = await marks(page);
     await page.locator(`[data-mark="${m.id}"] .cv-flag`).click();
     await page.getByRole('button', { name: 'Remove mark' }).click();
@@ -79,26 +83,29 @@ test.describe('gym hand-off on the canvas (G2, G3, G6, W4)', () => {
     await dlg.getByLabel('Add a topic').press('Enter');
     await dlg.getByLabel('Add a topic').fill('cs/algorithms/graphs');
     await dlg.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     expect((await objects(page))[0].topics).toEqual(['math/linear-algebra/eigenvalues', 'cs/algorithms/graphs']);
     await expect(page.locator('.cv-tagchip')).toContainText('eigenvalues');
 
     // the day
     await page.getByRole('button', { name: /^Tag .* with topics$/ }).first().click();
-    await page.getByLabel('Add a topic').fill('math/linear-algebra');
+    await page.getByLabel('Add a topic').fill('math/linear-algebra/rank');
     await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     const today = await page.evaluate(() => {
       const d = new Date();
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     });
-    expect(await withCanvas(page, `(h) => h.ctl.model.dayTopics('${today}')`)).toEqual(['math/linear-algebra']);
-    await expect(page.getByTestId('dayline').locator('.cv-topic-chip')).toHaveText('linear-algebra');
+    expect(await withCanvas(page, `(h) => h.ctl.model.dayTopics('${today}')`)).toEqual(['math/linear-algebra/rank']);
+    await expect(page.getByTestId('dayline').locator('.cv-topic-chip')).toHaveText('rank');
 
     // the canvas
     await page.getByRole('button', { name: /view options/ }).click();
     await page.getByRole('menuitem', { name: /Tag this canvas/ }).click();
-    await page.getByLabel('Add a topic').fill('math');
+    await page.getByLabel('Add a topic').fill('ml/architectures/transformer');
     await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
-    expect(await page.evaluate(() => (window as unknown as { __slate: { canvases: { meta(s: string): { topics: string[] } } } }).__slate.canvases.meta('main').topics)).toEqual(['math']);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(await page.evaluate(() => (window as unknown as { __slate: { canvases: { meta(s: string): { topics: string[] } } } }).__slate.canvases.meta('main').topics)).toEqual(['ml/architectures/transformer']);
   });
 
   test('uses the topic picker when the gym area registers one', async ({ page }) => {
