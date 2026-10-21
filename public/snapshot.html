@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-SCWgHpjlrBVdg7f0D97ZtqVAM06kIQkLBeF65pV8WXI=' blob:; style-src 'unsafe-inline' blob:; img-src blob: data:; font-src blob: data:; media-src blob: data:; connect-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-i9sIgB2zk5WRTj4KCiwyH/OUKMImRlP+JGQ8VKZlAz0=' blob:; style-src 'unsafe-inline' blob:; img-src blob: data:; font-src blob: data:; media-src blob: data:; connect-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Snapshot</title>
@@ -75,12 +75,14 @@
       cssByUrl.set(u, css);
     }
     const doc = new DOMParser().parseFromString(msg.html, 'text/html');
-    rewriteDoc(doc);
+    // scripts are taken out first (their src is resolved below) and re-created after the swap:
+    // scripts parsed by DOMParser never run
     const scripts = [];
     for (const s of doc.querySelectorAll('script')) {
       if (msg.scripts) scripts.push({ attrs: [...s.attributes].map((a) => [a.name, a.value]), text: s.textContent || '' });
       s.remove();
     }
+    rewriteDoc(doc);
     const root = document.importNode(doc.documentElement, true);
     document.replaceChild(root, document.documentElement);
     ui = null;

@@ -97,6 +97,9 @@ function ClippingView({ meta, content }: { meta: ClippingMeta; content: Clipping
   const [markList, setMarkList] = useState<{ clips: ClipRef[]; anchor: DOMRect } | null>(null);
 
   useEffect(() => setTitle(meta.title), [meta.title]);
+  // the toggle answers at once; the stored setting follows
+  const [scriptsOn, setScriptsOn] = useState(!!meta.scripts);
+  useEffect(() => setScriptsOn(!!meta.scripts), [meta.scripts]);
 
   const saveMeta = (patch: Partial<ClippingMeta>) => void library.putClipping({ ...meta, ...patch });
 
@@ -121,6 +124,8 @@ function ClippingView({ meta, content }: { meta: ClippingMeta; content: Clipping
   // ---------------------------------------------------------------- Original view
   const frame = useRef<FrameController | null>(null);
   const [frameText, setFrameText] = useState<string | null>(null);
+  // a (re)loaded frame has no text until it says so: jumps and anchors wait for it
+  useEffect(() => setFrameText(null), [shownView, meta.scripts]);
   const prepared = useMemo(() => (content.snapshotHtml ? prepareSnapshotHtml(content.snapshotHtml, !!meta.scripts) : ''), [content.snapshotHtml, meta.scripts]);
   const [frameAssets, setFrameAssets] = useState<Record<string, Blob> | null>(null);
   useEffect(() => {
@@ -440,7 +445,14 @@ function ClippingView({ meta, content }: { meta: ClippingMeta; content: Clipping
         )}
         {shownView === 'original' && (
           <label className="toggle small" title="Run the page's own scripts inside the sandbox">
-            <input type="checkbox" checked={!!meta.scripts} onChange={(e) => saveMeta({ scripts: e.target.checked })} />
+            <input
+              type="checkbox"
+              checked={scriptsOn}
+              onChange={(e) => {
+                setScriptsOn(e.target.checked);
+                saveMeta({ scripts: e.target.checked });
+              }}
+            />
             <FileCode2 size={14} /> Scripts
           </label>
         )}

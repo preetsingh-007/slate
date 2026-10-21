@@ -7,7 +7,11 @@ import { parseEpub } from '../../core/library/epub';
 import { closePdf, iteratePageTexts, openPdf } from '../../core/library/pdf';
 import { LibraryTextIndex } from '../../core/library/textIndex';
 
-const idle = () => new Promise<void>((r) => ('requestIdleCallback' in window ? (window as unknown as { requestIdleCallback(cb: () => void): void }).requestIdleCallback(() => r()) : setTimeout(r, 16)));
+/** Yields to the page; the timeout keeps indexing going on a busy page. */
+const idle = () =>
+  new Promise<void>((r) =>
+    'requestIdleCallback' in window ? (window as unknown as { requestIdleCallback(cb: () => void, o: { timeout: number }): void }).requestIdleCallback(() => r(), { timeout: 250 }) : setTimeout(r, 16),
+  );
 
 export function startIndexer(services: Services): () => void {
   const index = new LibraryTextIndex(services.db);

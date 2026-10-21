@@ -21,13 +21,48 @@ export interface Article extends ArticleMeta {
   textContent: string;
 }
 
-/** Parses page HTML with `pageUrl` as its base so relative URLs resolve to the page. */
+/**
+ * Parses page HTML and makes every URL absolute against `pageUrl`. Browsers ignore `<base>` in
+ * DOMParser documents (their base is the app's URL), and Readability resolves links and images
+ * against `doc.baseURI`, so URLs are resolved here first.
+ */
 export function parsePage(html: string, pageUrl: string): Document {
   const doc = new DOMParser().parseFromString(html, 'text/html');
-  for (const b of Array.from(doc.querySelectorAll('base'))) b.remove();
-  const base = doc.createElement('base');
-  base.setAttribute('href', pageUrl);
-  doc.head.prepend(base);
+  let base = pageUrl;
+  const own = doc.querySelector('base[href]')?.getAttribute('href');
+  if (own) {
+    try {
+      base = new URL(own, pageUrl).toString();
+    } catch {
+      /* keep the page URL */
+    }
+  }
+  const abs = (v: string) => {
+    if (/^(#|data:|javascript:|mailto:|tel:|about:)/i.test(v.trim())) return v;
+    try {
+      return new URL(v.trim(), base).toString();
+    } catch {
+      return v;
+    }
+  };
+  for (const attr of ['href', 'src', 'poster', 'data-src', 'data-original', 'data-lazy-src']) {
+    for (const el of Array.from(doc.querySelectorAll(`[${attr}]`))) el.setAttribute(attr, abs(el.getAttribute(attr)!));
+  }
+  for (const attr of ['srcset', 'data-srcset']) {
+    for (const el of Array.from(doc.querySelectorAll(`[${attr}]`))) {
+      el.setAttribute(
+        attr,
+        el
+          .getAttribute(attr)!
+          .split(/,\s+(?=\S)/)
+          .map((c) => {
+            const [u, ...rest] = c.trim().split(/\s+/);
+            return [abs(u), ...rest].join(' ');
+          })
+          .join(', '),
+      );
+    }
+  }
   return doc;
 }
 
