@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Rect } from '../model/types';
-import { applySpace, computeSpace, dominantAxis, type SpaceItem } from './space';
+import { applySpace, computeSpace, dominantAxis, spaceUnits, type SpaceItem } from './space';
 import { mulberry32 } from '../ink/testing/synth';
 
 const item = (id: string, x: number, y: number, w: number, h: number): SpaceItem => ({ id, rect: { x, y, w, h } });
@@ -126,5 +126,24 @@ describe('C4 local space removal', () => {
         }
       }
     }
+  });
+});
+
+describe('C4 space units', () => {
+  it('moves groups and images with their strokes together', async () => {
+    const { makeImage, makeStroke } = await import('./objects');
+    const ctx = (id: string) => ({ id, now: 0, device: 'd', z: 'm' });
+    const img = makeImage(ctx('img'), { asset: 'h', mime: 'image/png', natural: { w: 1, h: 1 }, x: 0, y: 0, w: 100, h: 100 });
+    const ink = makeStroke(ctx('ink'), { pts: [10, 10, 0.5, 200, 20, 0.5], tool: 'pen', color: '#000000', size: 2, attached: 'img' });
+    const g1 = { ...makeStroke(ctx('g1'), { pts: [500, 500, 0.5, 510, 510, 0.5], tool: 'pen', color: '#000000', size: 2 }), group: 'g' };
+    const g2 = { ...makeStroke(ctx('g2'), { pts: [600, 600, 0.5, 610, 610, 0.5], tool: 'pen', color: '#000000', size: 2 }), group: 'g' };
+    const lone = makeStroke(ctx('lone'), { pts: [900, 900, 0.5, 910, 910, 0.5], tool: 'pen', color: '#000000', size: 2 });
+    const { items, members } = spaceUnits([img, ink, g1, g2, lone]);
+    expect(items).toHaveLength(3);
+    const unitOf = (id: string) => [...members].find(([, m]) => m.includes(id))![0];
+    expect(unitOf('img')).toBe(unitOf('ink'));
+    expect(unitOf('g1')).toBe(unitOf('g2'));
+    const imgUnit = items.find((i) => i.id === unitOf('img'))!;
+    expect(imgUnit.rect.w).toBeGreaterThan(200);
   });
 });
