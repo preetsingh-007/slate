@@ -10,6 +10,8 @@ async function start() {
   try {
     const services = await createServices();
     void requestPersistentStorage();
+    // test builds expose the services to Playwright (seeding data, inspecting state)
+    if (import.meta.env.VITE_SLATE_E2E) (window as unknown as { __slate: unknown }).__slate = services;
     root.render(
       <StrictMode>
         <ServicesContext.Provider value={services}>

@@ -5,7 +5,9 @@
  *   in the side pane at the locator and flash it;
  * - selection actions (C15, G2, G3): areas add actions to the canvas selection menu;
  * - topic picker (G1): the gym area supplies a picker for gym topic and problem paths;
- * - canvas API (S3, S6, G4): other areas insert captures, reveal objects and regions.
+ * - canvas API (S3, S6, G4): other areas insert captures, reveal objects and regions;
+ * - link handler and file importer (S9, S10): the library handles pasted URLs and dropped
+ *   PDF and EPUB files.
  */
 import type { ComponentType } from 'react';
 import type { Capture } from '../../core/model/capture';
@@ -102,4 +104,34 @@ export function registerCanvasApi(slug: string, api: CanvasApi | null) {
 
 export function canvasApi(slug: string): CanvasApi | undefined {
   return canvasApis.get(slug);
+}
+
+// ---------------------------------------------------------------- links and files from outside
+
+/** Offers New from link for a URL (pasted or dropped on the canvas, S9/S10). */
+export type LinkHandler = (url: string) => void;
+let linkHandler: LinkHandler | null = null;
+
+export function registerLinkHandler(fn: LinkHandler) {
+  linkHandler = fn;
+}
+
+export function handleLink(url: string): boolean {
+  if (!linkHandler) return false;
+  linkHandler(url);
+  return true;
+}
+
+/** Imports PDF and EPUB files as books (dropped on the canvas or the library, S10, L1). */
+export type FileImporter = (files: File[]) => Promise<void>;
+let fileImporter: FileImporter | null = null;
+
+export function registerFileImporter(fn: FileImporter) {
+  fileImporter = fn;
+}
+
+export async function importFiles(files: File[]): Promise<boolean> {
+  if (!fileImporter) return false;
+  await fileImporter(files);
+  return true;
 }

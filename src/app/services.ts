@@ -9,6 +9,7 @@ import { SlateDB } from '../core/storage/idb';
 import { getDeviceId } from '../core/util/ids';
 import { CanvasStore } from '../core/stores/canvases';
 import { FormalizedStore } from '../core/stores/formalized';
+import { MemoryGymFiles, type GymFiles } from '../core/gym/files';
 import { LibraryStore } from '../core/stores/library';
 import { SettingsStore } from '../core/stores/settings';
 
@@ -20,6 +21,8 @@ export interface Services {
   canvases: CanvasStore;
   library: LibraryStore;
   formalized: FormalizedStore;
+  /** gym's files for the gym reader, revision list and topic picker (offline mirror, set up by sync) */
+  gymFiles: GymFiles;
   device: string;
 }
 
@@ -32,7 +35,8 @@ export async function createServices(dbName = 'slate'): Promise<Services> {
   const canvases = await CanvasStore.open(db, docs, device);
   const library = await LibraryStore.open(db);
   const formalized = await FormalizedStore.open(db);
-  return { db, docs, assets, settings, canvases, library, formalized, device };
+  const gymFiles: GymFiles = new MemoryGymFiles({}, '');
+  return { db, docs, assets, settings, canvases, library, formalized, gymFiles, device };
 }
 
 export const ServicesContext = createContext<Services | null>(null);

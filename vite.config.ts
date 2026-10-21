@@ -30,6 +30,7 @@ const csp = () => ({
 });
 
 export default defineConfig({
+  define: process.env.SLATE_E2E ? { 'import.meta.env.VITE_SLATE_E2E': '"1"' } : {},
   plugins: [
     react(),
     csp(),
