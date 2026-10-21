@@ -10,7 +10,15 @@ import { objectsMap } from '../canvas/segment';
 import { isWritablePath } from './scope';
 import { sha256Hex } from '../util/ids';
 import type { BookMeta, ClippingMeta } from '../model/types';
-import { decodePng } from './testing/stubRasterizer';
+import { decodePng, stubRasterizer } from './testing/stubRasterizer';
+import { API } from './testing/device';
+import { DocStore } from '../storage/docstore';
+import { SettingsStore } from '../stores/settings';
+import { AssetStore } from '../storage/assets';
+import { CanvasStore } from '../stores/canvases';
+import { LibraryStore } from '../stores/library';
+import { FormalizedStore } from '../stores/formalized';
+import { SyncEngine } from './engine';
 import { parseFrontMatter } from './derived/frontmatter';
 
 beforeAll(useNodeBlob);
@@ -651,7 +659,7 @@ describe('local first (R1)', () => {
 
 describe('clippings and the rebuild', () => {
   it('rebuilds the local cache from the repository', async () => {
-    const { dev } = await setup();
+    const { gh, dev } = await setup();
     const a = await dev('a');
     await a.draw([textBox('t1', T(21), 'keep me')]);
     await a.library.putClipping({ id: 'c1', slug: '2026-10-21-x', origin: 'clipboard', title: 'X', format: 'plain', added: 1, contentHash: 'h' }, { markdown: 'text', assets: [] });
@@ -661,6 +669,26 @@ describe('clippings and the rebuild', () => {
     expect(await a.db.get('canvases')).toBeUndefined();
     expect(a.settings.getSecrets().token).toBe('tok');
     expect(await a.db.get('secrets')).toBeDefined();
+
+    // the app reloads: fresh stores on the same database rebuild from the repository (R9)
+    const docs = new DocStore(a.db);
+    const settings = await SettingsStore.open(a.db);
+    const assets = new AssetStore(a.db);
+    const canvases = await CanvasStore.open(a.db, docs, 'a');
+    const library = await LibraryStore.open(a.db);
+    const formalized = await FormalizedStore.open(a.db);
+    const sync = new SyncEngine({ db: a.db, docs, assets, settings, canvases, library, formalized, rasterize: stubRasterizer, fetch: gh.fetch }, { apiBase: API });
+    canvases.setRemoteFetcher((id) => sync.ensureDoc(id));
+    await sync.sync();
+    expect(sync.getStatus().phase).toBe('synced');
+    expect(library.clipping('c1')?.title).toBe('X');
+    const model = canvases.model('main');
+    await model.load(canvases.months('main'));
+    expect(model.get('t1')).toMatchObject({ kind: 'text', content: 'keep me' });
+    expect(await sync.ensureClipping('c1')).toBe(true);
+    expect((await library.clippingContent('c1'))?.markdown).toBe('text');
+    sync.destroy();
+    await docs.destroy();
   });
 
   it('refuses to rebuild while changes are not on GitHub', async () => {
