@@ -119,6 +119,20 @@ export class FakeRepo {
     return b ? dec.decode(b) : undefined;
   }
 
+  /** Commits from head to root (first parents). */
+  history(branch = this.defaultBranch): { sha: string; message: string }[] {
+    const out: { sha: string; message: string }[] = [];
+    for (let sha = this.refs.get(branch); sha; sha = this.commits.get(sha)!.parents[0]) out.push({ sha, message: this.commits.get(sha)!.message });
+    return out;
+  }
+
+  /** Files of a commit as path → bytes. */
+  filesAt(sha: string): Map<string, Uint8Array> {
+    const out = new Map<string, Uint8Array>();
+    for (const [p, b] of this.trees.get(this.commits.get(sha)!.tree)!) out.set(p, this.blobs.get(b)!);
+    return out;
+  }
+
   /** Commit messages from head to root. */
   log(branch = this.defaultBranch): string[] {
     const out: string[] = [];

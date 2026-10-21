@@ -174,13 +174,19 @@ describe('gym compatibility (G9)', () => {
         copyFileSync(a: string, b: string): void;
       };
       const path = (await import(/* @vite-ignore */ pathName)) as { join(...p: string[]): string; dirname(p: string): string; resolve(p: string): string };
-      for (const [p, bytes] of files) {
-        const dest = path.join(out, p);
-        fs.mkdirSync(path.dirname(dest), { recursive: true });
-        fs.writeFileSync(dest, bytes);
-      }
-      fs.mkdirSync(path.join(out, 'scripts'), { recursive: true });
-      fs.copyFileSync(path.resolve('tests/gym/check.py'), path.join(out, 'scripts', 'check.py'));
+      const write = (dir: string, tree: Map<string, Uint8Array>) => {
+        for (const [p, bytes] of tree) {
+          const dest = path.join(dir, p);
+          fs.mkdirSync(path.dirname(dest), { recursive: true });
+          fs.writeFileSync(dest, bytes);
+        }
+        fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
+        fs.copyFileSync(path.resolve('tests/gym/check.py'), path.join(dir, 'scripts', 'check.py'));
+      };
+      write(out, files);
+      // G9: gym's CI must pass on every app commit, not only the last one
+      const appCommits = repo.history().filter((c) => c.message !== 'Initial commit' && !c.message.startsWith('external'));
+      appCommits.reverse().forEach((c, i) => write(path.join(`${out}-commits`, `${String(i + 1).padStart(2, '0')}-${c.message.split(':')[0]}`), repo.filesAt(c.sha)));
     }
   }, 60_000);
 });
