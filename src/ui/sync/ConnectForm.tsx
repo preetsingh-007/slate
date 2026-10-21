@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { CircleCheck, CircleX } from 'lucide-react';
 import { useServices } from '../../app/services';
 import type { VerifyResult } from '../../core/sync/engine';
+import { ONBOARDING_KEY } from './state';
 
 export const NEW_TOKEN_URL = 'https://github.com/settings/personal-access-tokens/new';
 
@@ -64,7 +65,7 @@ export function VerifyChecks({ result }: { result: VerifyResult }) {
 }
 
 export function ConnectForm({ onConnected, submitLabel = 'Verify and connect', autoFocus }: { onConnected?: () => void; submitLabel?: string; autoFocus?: boolean }) {
-  const { sync, settings } = useServices();
+  const { sync, settings, db } = useServices();
   const secrets = settings.getSecrets();
   const [repo, setRepo] = useState(secrets.repo ?? '');
   const [branch, setBranch] = useState(secrets.branch ?? 'main');
@@ -81,6 +82,8 @@ export function ConnectForm({ onConnected, submitLabel = 'Verify and connect', a
       setResult(r);
       if (r.ok) {
         setToken('');
+        // connected once: first-run onboarding never shows again, even after disconnecting
+        void db.set(ONBOARDING_KEY, 'connected');
         onConnected?.();
       }
     } finally {
