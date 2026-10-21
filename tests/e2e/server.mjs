@@ -16,7 +16,8 @@ for (const f of readdirSync(join(here, 'routes')).filter((f) => f.endsWith('.mjs
 
 createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', req.headers.origin ?? '*');
-  res.setHeader('Access-Control-Allow-Headers', '*');
+  // '*' does not cover Authorization in browsers: echo the requested headers instead
+  res.setHeader('Access-Control-Allow-Headers', req.headers['access-control-request-headers'] ?? '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, POST, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Expose-Headers', '*');
   if (req.method === 'OPTIONS') {

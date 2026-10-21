@@ -1,0 +1,209 @@
+/* Sync area: top-bar status, settings and onboarding dialogs. */
+
+.sync-status {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.sync-status:hover {
+  background: var(--bg-sunk);
+}
+
+.sync-status.phase-synced {
+  color: var(--ok);
+}
+
+.sync-status.phase-error {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+}
+
+.sync-status.phase-offline,
+.sync-status.phase-off {
+  color: var(--fg-muted);
+}
+
+.sync-status.warn:not(.phase-error) {
+  color: var(--warn);
+}
+
+.sync-status .sync-badge {
+  color: var(--warn);
+}
+
+.spin {
+  animation: sync-spin 1s linear infinite;
+}
+
+@keyframes sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}
+
+.sync-dialog {
+  width: min(640px, 100%);
+}
+
+.sync-dialog-head {
+  position: sticky;
+  top: -20px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -20px -20px 0;
+  padding: 16px 20px 8px;
+  background: var(--bg-elev);
+}
+
+.sync-dialog a {
+  color: var(--accent);
+}
+
+.sync-dialog-head h2 {
+  margin: 0;
+}
+
+.sync-dialog section {
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.sync-dialog section:first-of-type {
+  border-top: 0;
+}
+
+.sync-dialog h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.sync-dialog .field input,
+.sync-dialog .field select {
+  width: 100%;
+  min-height: 36px;
+}
+
+.sync-dialog .field input[type='range'] {
+  min-height: 24px;
+}
+
+.sync-steps {
+  margin: 8px 0 12px;
+  padding-left: 22px;
+  font-size: 14px;
+}
+
+.sync-steps li {
+  margin: 4px 0;
+}
+
+.sync-hint,
+.muted {
+  color: var(--fg-muted);
+  font-size: 13px;
+}
+
+.sync-error {
+  color: var(--danger);
+}
+
+.sync-warn {
+  color: var(--warn);
+  font-size: 13px;
+}
+
+.sync-checks {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  font-size: 14px;
+}
+
+.sync-checks li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0;
+}
+
+.sync-checks .ok {
+  color: var(--ok);
+}
+
+.sync-checks .bad {
+  color: var(--danger);
+}
+
+.sync-checks .note {
+  color: var(--fg-muted);
+}
+
+.sync-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 0;
+  cursor: pointer;
+}
+
+.sync-check input {
+  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+}
+
+.sync-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.sync-facts dt {
+  color: var(--fg-muted);
+}
+
+.sync-facts dd {
+  margin: 0;
+}
+
+.sync-warnings {
+  margin: 8px 0;
+  padding-left: 18px;
+  color: var(--warn);
+  font-size: 13px;
+}
+
+.sync-details summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.sync-dialog .actions {
+  flex-wrap: wrap;
+}
+
+.sync-offline-choice {
+  justify-content: flex-start;
+}

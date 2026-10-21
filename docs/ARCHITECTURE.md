@@ -54,3 +54,16 @@ Rendering: strokes and shapes are drawn on canvas tiles (only visible tiles, cac
 ## Sync
 
 Sync pulls on open and on returning to the foreground, and pushes about 20 seconds after the last change and when the app goes to the background. Yjs documents merge; JSON files merge field by field; derived files are regenerated, never merged. Commits touch only `journal/` and `library/`.
+
+The engine is [`core/sync/engine.ts`](../src/core/sync/engine.ts) (`services.sync`); the GitHub API is [`git/github.ts`](../src/core/sync/git/github.ts), whose `commit` is the one place that writes and checks the write scope ([`scope.ts`](../src/core/sync/scope.ts)). A push is up to one commit per scope, library before journal, published with one ref update ([`commits.ts`](../src/core/sync/commits.ts)).
+
+| File | On pull | On push |
+| --- | --- | --- |
+| `*.yjs` (segments, `todo.yjs`, annotations) | merged as CRDT updates; segments and annotations only if the device has them | the merged state, when GitHub lacks part of it |
+| `canvas.json`, `book.json`, `meta.json` | three-way merge per field against the last synced version (both changed: this device wins; never synced here: the repository wins; `topics` as sets; `segments` per month) | written when different |
+| `settings.json` | `mergeSettings`: reading positions and pane state by their own time, the rest newest-wins | written when different |
+| `clipping.md`, `snapshot.html`, assets | downloaded when opened | written once (content is immutable, L11); assets once per content hash |
+| derived (`days/`, `marks/`, `queue.md`, `todos.md`, READMEs, `annotations.md`) | ignored, except queue and to-do lines of segments not on the device | regenerated ([`derived/`](../src/core/sync/derived)) |
+| `formalized.md` | parsed into `services.formalized` | never written |
+
+Other areas download content on demand before opening it: `canvases.model(slug)` already asks sync for each month it loads; call `services.sync.ensureDoc(annotationsDocId(id))` before opening a book's or clipping's annotations, `services.sync.ensureClipping(id)` before reading a clipping's content, and `services.sync.ensureBookFile(id)` for a book file in Git LFS mode. `services.gymFiles` is the offline mirror of gym's Markdown and images, refreshed on every pull.
