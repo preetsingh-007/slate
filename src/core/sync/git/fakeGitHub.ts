@@ -242,7 +242,7 @@ export class FakeGitHub {
     const isJson = !(m[1] === 'lfs' && method === 'PUT');
     const body = isJson && bytes?.length ? (JSON.parse(dec.decode(bytes)) as Record<string, unknown>) : {};
     try {
-      if (m[1] === 'lfs') return await this.lfs(repo, method, rest, body, extra, bytes, u.origin + this.prefix);
+      if (m[1] === 'lfs') return await this.lfs(repo, method, rest, body, extra, bytes, u.origin + this.prefix, auth);
       return await this.route(repo, method, rest, u.searchParams, body, extra);
     } catch (err) {
       return json(500, { message: String((err as Error)?.message ?? err) }, extra);
@@ -351,14 +351,15 @@ export class FakeGitHub {
   }
 
   /** Minimal Git LFS batch API (for the LFS client's unit tests). */
-  private async lfs(repo: FakeRepo, method: string, rest: string, body: Record<string, unknown>, extra: Record<string, string>, bytes: Uint8Array | undefined, base: string): Promise<Response> {
-    const href = (oid: string) => `${base}/lfs/${repo.fullName}/objects/${oid}`;
+  private async lfs(repo: FakeRepo, method: string, rest: string, body: Record<string, unknown>, extra: Record<string, string>, bytes: Uint8Array | undefined, base: string, auth: string): Promise<Response> {
+    // like real LFS servers, transfer actions carry the headers to use
+    const action = (oid: string) => ({ href: `${base}/lfs/${repo.fullName}/objects/${oid}`, header: { Authorization: auth } });
     if (method === 'POST' && rest === '/objects/batch') {
       const op = String(body.operation);
       const objects = ((body.objects as { oid: string; size: number }[]) ?? []).map((o) => {
         const have = repo.lfs.has(o.oid);
-        if (op === 'upload') return have ? { oid: o.oid, size: o.size } : { oid: o.oid, size: o.size, actions: { upload: { href: href(o.oid) } } };
-        return have ? { oid: o.oid, size: o.size, actions: { download: { href: href(o.oid) } } } : { oid: o.oid, size: o.size, error: { code: 404, message: 'Object does not exist' } };
+        if (op === 'upload') return have ? { oid: o.oid, size: o.size } : { oid: o.oid, size: o.size, actions: { upload: action(o.oid) } };
+        return have ? { oid: o.oid, size: o.size, actions: { download: action(o.oid) } } : { oid: o.oid, size: o.size, error: { code: 404, message: 'Object does not exist' } };
       });
       return json(200, { transfer: 'basic', objects }, { ...extra, 'content-type': 'application/vnd.git-lfs+json' });
     }

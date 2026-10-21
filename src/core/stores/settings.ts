@@ -16,6 +16,8 @@ export interface DeviceSecrets {
   tokenExpiry?: number;
   helperUrl?: string;
   helperKey?: string;
+  /** GitHub API base for test builds only (the mocked API); production always uses api.github.com */
+  apiBase?: string;
 }
 
 /** Device-only preferences (not synced). */

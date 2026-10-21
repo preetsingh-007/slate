@@ -26,6 +26,7 @@ export class CanvasStore {
   readonly onChange = new Emitter<void>();
   private metas: CanvasMeta[] = [];
   private models = new Map<string, CanvasModel>();
+  private fetchRemote: ((docId: string) => Promise<unknown>) | null = null;
 
   private constructor(
     private db: SlateDB,
@@ -80,10 +81,26 @@ export class CanvasStore {
   model(slug: string): CanvasModel {
     let m = this.models.get(slug);
     if (!m) {
-      m = new CanvasModel(slug, { open: (month) => this.docs.open(segmentDocId(slug, month)).then((d) => (this.docs.retain(segmentDocId(slug, month)), d)) }, this.device);
+      m = new CanvasModel(slug, { open: (month) => this.openSegment(slug, month) }, this.device);
       this.models.set(slug, m);
     }
     return m;
+  }
+
+  /**
+   * R9: lets sync download a segment from the repository before it is opened, when this device
+   * does not have it yet (set by the sync engine; it bounds how long it waits).
+   */
+  setRemoteFetcher(fn: ((docId: string) => Promise<unknown>) | null) {
+    this.fetchRemote = fn;
+  }
+
+  private async openSegment(slug: string, month: string) {
+    const id = segmentDocId(slug, month);
+    if (this.fetchRemote) await this.fetchRemote(id).catch(() => undefined);
+    const doc = await this.docs.open(id);
+    this.docs.retain(id);
+    return doc;
   }
 
   /** Records the bounds of loaded segments in the canvas index. */

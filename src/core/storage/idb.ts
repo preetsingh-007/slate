@@ -174,4 +174,10 @@ export class SlateDB {
     tx.objectStore('kv').delete(key);
     await txDone(tx);
   }
+
+  /** All kv keys (used to rebuild the local cache from the repository, R9). */
+  async kvKeys(): Promise<string[]> {
+    const tx = this.db.transaction('kv', 'readonly');
+    return (await req(tx.objectStore('kv').getAllKeys())) as string[];
+  }
 }
