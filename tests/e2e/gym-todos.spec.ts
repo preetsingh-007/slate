@@ -72,7 +72,7 @@ test.describe('To-dos page (G4)', () => {
     // remove: the button, then Backspace on an emptied item
     await press(p.getByRole('button', { name: 'Remove “Email TA”' }));
     await expect.poll(() => checklist(page)).toBe('- [x] Buy chalk\n- [ ] Read Axler 5B\n');
-    await expect(page.getByRole('status')).toContainText('Removed “Email TA”');
+    await expect(page.locator('.toast-host')).toContainText('Removed “Email TA”');
     const item = list.getByRole('textbox', { name: 'To-do' }).first();
     await item.fill('');
     await item.press('Backspace');

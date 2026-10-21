@@ -124,12 +124,12 @@ test.describe('lasso from a gym file (S1, S2, S5, S6, G7)', () => {
     const text = await page.evaluate((p) => (window as any).__slate.gymFiles.readText(p), NOTES);
     await page.evaluate(([p, t]) => (window as any).__slateGym.set(p, t, 'c2'), [NOTES, text.replace('real inner product space', 'real inner-product space')]);
     await page.evaluate((src) => (window as any).__slateGym.openSource(src), c.source);
-    await expect(page.getByRole('status').getByText('showing the closest match')).toBeVisible();
+    await expect(page.locator('.toast-host').getByText('showing the closest match')).toBeVisible();
     await expect(pane(page).locator('.gym-flash').first()).toBeVisible();
 
     await page.evaluate((p) => (window as any).__slateGym.set(p, undefined, 'c3'), NOTES);
     await page.evaluate((src) => (window as any).__slateGym.openSource(src), c.source);
-    await expect(page.getByRole('status').getByText('is no longer in gym')).toBeVisible();
+    await expect(page.locator('.toast-host').getByText('is no longer in gym')).toBeVisible();
   });
 
   test('drags a capture onto the canvas, or sends it below the latest content when the canvas is on screen (S3)', async ({ page }) => {
