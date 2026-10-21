@@ -345,6 +345,8 @@ function CanvasTodos() {
   const [pending, setPending] = useState<Set<string>>(new Set());
   useEffect(() => index.onChange.on(() => setTick((n) => n + 1)), [index]);
   useEffect(() => services.canvases.onChange.on(() => setTick((n) => n + 1)), [services]);
+  // R9: on a new device, months not opened yet download now; the index re-reads them as they land
+  useEffect(() => void services.canvases.fetchAllSegments(), [services]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const days = useMemo(() => index.days(), [index, tick]);
   // once the list no longer has a checked item, forget it

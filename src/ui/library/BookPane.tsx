@@ -15,13 +15,36 @@ import { EpubViewer } from './epub/EpubViewer';
 import { PdfViewer } from './pdf/PdfViewer';
 
 export function BookPane({ tab }: PaneProps<Extract<PaneTab, { kind: 'book' }>>) {
+  const services = useServices();
   const book = useBook(tab.id);
   const hasFile = useHasFile(book?.fileHash ?? '');
   const [missing, setMissing] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   useEffect(() => setMissing(hasFile === false), [hasFile]);
   const onMissing = useCallback(() => setMissing(true), []);
+  // R9, L6: in Git LFS mode the file downloads from the repository when it is not here
+  const bookId = book?.id;
+  useEffect(() => {
+    if (!missing || !bookId || !services.settings.get().lfs) return;
+    let alive = true;
+    setDownloading(true);
+    void services.sync.ensureBookFile(bookId).then((ok) => {
+      if (!alive) return;
+      setDownloading(false);
+      if (ok) announceBookFile();
+    });
+    return () => {
+      alive = false;
+    };
+  }, [missing, bookId, services]);
   if (!book) return <div className="empty">This book was deleted.</div>;
   if (hasFile === null) return <div className="empty">Opening…</div>;
+  if (missing && downloading)
+    return (
+      <div className="empty" role="status">
+        Downloading the file of “{book.title}”…
+      </div>
+    );
   if (missing) return <MissingFile bookId={book.id} />;
   return book.format === 'pdf' ? <PdfViewer key={book.fileHash} book={book} onMissing={onMissing} /> : <EpubViewer key={book.fileHash} book={book} onMissing={onMissing} />;
 }

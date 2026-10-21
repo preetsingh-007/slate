@@ -95,12 +95,37 @@ export class CanvasStore {
     this.fetchRemote = fn;
   }
 
+  /**
+   * R9 without blocking offline use: a month this device has opens at once and the remote
+   * version merges into it when it arrives; only a month with nothing local waits (bounded by
+   * the fetcher) for its download.
+   */
   private async openSegment(slug: string, month: string) {
     const id = segmentDocId(slug, month);
-    if (this.fetchRemote) await this.fetchRemote(id).catch(() => undefined);
+    if (this.fetchRemote) {
+      const fetching = this.fetchRemote(id).catch(() => undefined);
+      if (!(await this.docs.has(id))) await fetching;
+    }
     const doc = await this.docs.open(id);
     this.docs.retain(id);
     return doc;
+  }
+
+  /**
+   * R9 for views that read every segment without opening the canvases (S7 margin marks, the
+   * To-dos page's canvas to-dos): asks sync for each month listed in the canvas index. Months
+   * already merged cost nothing; the rest download in the background (a few at a time) and
+   * announce themselves through `DocStore.onDocChanged`.
+   */
+  async fetchAllSegments(): Promise<void> {
+    const fetch = this.fetchRemote;
+    if (!fetch) return;
+    const ids = this.metas.flatMap((m) => Object.keys(m.segments ?? {}).map((month) => segmentDocId(m.slug, month)));
+    let next = 0;
+    const worker = async () => {
+      while (next < ids.length) await fetch(ids[next++]).catch(() => undefined);
+    };
+    await Promise.all([worker(), worker(), worker()]);
   }
 
   /** Records the bounds of loaded segments in the canvas index. */

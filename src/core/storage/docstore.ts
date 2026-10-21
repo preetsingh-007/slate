@@ -183,6 +183,11 @@ export class DocStore {
     return Y.diffUpdate(state, sv);
   }
 
+  /** Whether this device has the document (stored, pending or open). */
+  async has(docId: string): Promise<boolean> {
+    return this.loaded.has(docId) || (await this.listDocIds()).includes(docId);
+  }
+
   async listDocIds(): Promise<string[]> {
     if (!this.knownIds) {
       this.knownIds = new Set(await this.db.listDocIds());

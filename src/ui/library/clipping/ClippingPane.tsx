@@ -24,7 +24,7 @@ import type { PaneProps } from '../../panes/registry';
 import { rasterizeRegion } from '../../sources/rasterize';
 import type { LassoResult } from '../../sources/LassoOverlay';
 import { ClipList, ClipMark } from '../ClipMarks';
-import { useAnnotations, useClipRefs, useClipping, useKeepScroll, useLocalPref } from '../hooks';
+import { useAnnotations, useClipRefs, useClipping, useClippingContent, useKeepScroll, useLocalPref } from '../hooks';
 import { useLibraryUi } from '../state';
 import { buildTextMap, hitInPolygon, rangeFragment, offsetOf, rangeFromOffsets, rangeRectsIn, type TextMap } from '../textMap';
 import { HighlightMenu, LassoHost, NoteEditor, SelectionMenu, copyText } from '../viewerParts';
@@ -36,18 +36,15 @@ type Tool = 'select' | 'highlight' | 'lasso';
 
 export function ClippingPane({ tab }: PaneProps<Extract<PaneTab, { kind: 'clipping' }>>) {
   const meta = useClipping(tab.id);
-  const { library } = useServices();
-  const [content, setContent] = useState<ClippingContent | null | undefined>(undefined);
-  useEffect(() => {
-    let alive = true;
-    void library.clippingContent(tab.id).then((c) => alive && setContent(c));
-    return () => {
-      alive = false;
-    };
-  }, [library, tab.id]);
+  const { content, fetching } = useClippingContent(tab.id);
   if (!meta) return <div className="empty">This clipping was deleted.</div>;
   if (content === undefined) return <div className="empty">Opening…</div>;
-  if (!content) return <div className="empty">The content of this clipping is not on this device yet. It downloads with the next sync.</div>;
+  if (!content)
+    return (
+      <div className="empty" role="status" data-testid="clipping-missing">
+        {fetching ? 'Downloading this clipping…' : 'The content of this clipping is not on this device yet. It downloads when you are online and connected to GitHub.'}
+      </div>
+    );
   return <ClippingView meta={meta} content={content} />;
 }
 

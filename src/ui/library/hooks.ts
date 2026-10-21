@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import type * as Y from 'yjs';
 import type { Annotation, BookMeta, ClippingMeta } from '../../core/model/types';
 import type { ClipRef } from '../../core/stores/canvases';
+import type { ClippingContent } from '../../core/stores/library';
 import { annotationsDocId, parseSegmentDocId } from '../../core/stores/docIds';
 import { annotationsMap, listAnnotations } from '../../core/library/annotations';
 import { useServices } from '../../app/services';
@@ -36,9 +37,12 @@ export function useSettingsVersion(): number {
   return v;
 }
 
-/** The annotation document of an item, kept loaded while mounted. */
+/**
+ * The annotation document of an item, kept loaded while mounted. The local document opens at
+ * once; the repository's version downloads in the background (R9) and merges into it.
+ */
 export function useAnnotations(itemId: string): { doc: Y.Doc | null; list: Annotation[] } {
-  const { docs } = useServices();
+  const { docs, sync } = useServices();
   const [doc, setDoc] = useState<Y.Doc | null>(null);
   const [list, setList] = useState<Annotation[]>([]);
   useEffect(() => {
@@ -54,14 +58,67 @@ export function useAnnotations(itemId: string): { doc: Y.Doc | null; list: Annot
       const on = () => setList(listAnnotations(d));
       map.observe(on);
       off = () => map.unobserve(on);
+      // retained above, so the download merges into this open document
+      void sync.ensureDoc(id);
     });
     return () => {
       alive = false;
       off?.();
       docs.release(id);
     };
-  }, [docs, itemId]);
+  }, [docs, sync, itemId]);
   return { doc, list };
+}
+
+/**
+ * A clipping's content (R9): what this device has shows at once; otherwise it downloads from
+ * the repository (`fetching` while it does), and again whenever sync recovers (back online).
+ * `content` is undefined while reading local storage, null when not available yet.
+ */
+export function useClippingContent(id: string): { content: ClippingContent | null | undefined; fetching: boolean } {
+  const { library, sync } = useServices();
+  const [content, setContent] = useState<ClippingContent | null | undefined>(undefined);
+  const [fetching, setFetching] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    let have = false;
+    let busy = false;
+    const read = async () => {
+      const c = await library.clippingContent(id);
+      if (!alive) return null;
+      if (c) have = true;
+      setContent(c);
+      return c;
+    };
+    const download = async () => {
+      if (have || busy) return;
+      busy = true;
+      setFetching(true);
+      try {
+        await sync.ensureClipping(id);
+        await read();
+      } finally {
+        busy = false;
+        if (alive) setFetching(false);
+      }
+    };
+    void read().then((c) => {
+      // the local copy is complete (clippings never change, L11); annotations still sync
+      if (c) void sync.ensureDoc(annotationsDocId(id));
+      else void download();
+    });
+    // content can also arrive with a regular pull, or once sync recovers
+    const offLib = library.onChange.on(() => void (!have && read()));
+    const offSync = sync.onStatus.on((st) => {
+      if (st.phase === 'synced' && !have) void download();
+    });
+    return () => {
+      alive = false;
+      offLib();
+      offSync();
+    };
+  }, [library, sync, id]);
+  return { content, fetching };
 }
 
 /**
@@ -74,6 +131,9 @@ export function useClipRefs(itemId: string): ClipRef[] {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => {
     let alive = true;
+    // R9: on a new device the clips are in segments not downloaded yet; they arrive through
+    // onDocChanged below
+    void canvases.fetchAllSegments();
     const load = () =>
       void canvases.findClipsOf(itemId).then((r) => {
         if (alive) setRefs((prev) => (sameRefs(prev, r) ? prev : r));
