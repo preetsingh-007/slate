@@ -11,6 +11,7 @@ import { useServices } from '../../app/services';
 import { useApp } from '../app/store';
 import { makeMark } from '../../core/canvas/marks';
 import { uid } from '../../core/util/ids';
+import * as registries from '../common/registries';
 import { registerCanvasApi, canvasApi, type CanvasApi } from '../common/registries';
 import { toast } from '../common/toast';
 import { CanvasCtx, setActiveView, isActiveView, getActiveView, type CanvasCtxValue, type TopicTarget } from './context';
@@ -43,7 +44,7 @@ const TOOL_KEYS: Record<string, Tool> = { p: 'pen', m: 'highlighter', e: 'eraser
 
 /** Test builds expose each open canvas for Playwright (seeding, inspecting, frame timing). */
 const testHook: Record<string, { engine: CanvasEngine; ctl: CanvasController; actions: ActionCtx; api: CanvasApi }> = {};
-if (import.meta.env.VITE_SLATE_E2E && typeof window !== 'undefined') Object.assign(window, { __slateCanvas: testHook, __slateApp: useApp });
+if (import.meta.env.VITE_SLATE_E2E && typeof window !== 'undefined') Object.assign(window, { __slateCanvas: testHook, __slateApp: useApp, __slateRegistries: registries });
 
 function isEditable(t: EventTarget | null): boolean {
   const el = t instanceof Element ? t : null;

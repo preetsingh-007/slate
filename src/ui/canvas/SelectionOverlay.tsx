@@ -75,8 +75,9 @@ export function SelectionOverlay() {
       const bw = el.offsetWidth || 320;
       const bh = el.offsetHeight || 44;
       const left = Math.max(8, Math.min(engine.width - bw - 8, x + w / 2 - bw / 2));
-      let top = y - bh - 14;
-      if (top < 8) top = Math.min(engine.height - bh - 8, y + h + 14);
+      // clear of the rotation handle above the box
+      let top = y - bh - 52;
+      if (top < 8) top = Math.min(engine.height - bh - 8, y + h + 16);
       if (top < 8 || top > engine.height - bh - 8) top = 8;
       el.style.transform = `translate(${left}px, ${top}px)`;
     }

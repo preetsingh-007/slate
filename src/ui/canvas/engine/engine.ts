@@ -679,7 +679,10 @@ export class CanvasEngine {
   }
 
   private onDown(e: PointerEvent) {
-    if (this.interactiveTarget(e)) return;
+    if (this.interactiveTarget(e)) {
+      this.lastTap = null;
+      return;
+    }
     const tools = useTools.getState();
     if (e.pointerType === 'pen' && !tools.penDetected) tools.setPenDetected(true);
     this.rect = this.root.getBoundingClientRect();
@@ -1002,10 +1005,10 @@ export class CanvasEngine {
       }
       return;
     }
-    if (dbl) {
+    if (dbl && (!hit || hit.kind === 'text')) {
       // double tap: edit a text box, or start one on an empty spot
-      if (hit?.kind === 'text') this.textRequest.emit({ at: p, id: hit.id });
-      else if (!hit) this.textRequest.emit({ at: p });
+      if (hit) this.textRequest.emit({ at: p, id: hit.id });
+      else this.textRequest.emit({ at: p });
       return;
     }
     if (hit) this.select([hit.id]);

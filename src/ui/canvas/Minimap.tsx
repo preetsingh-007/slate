@@ -4,7 +4,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import type { Rect } from '../../core/model/types';
-import { objectBounds } from '../../core/canvas/bounds';
+import { objectBounds, unionRect } from '../../core/canvas/bounds';
 import { dayLabel } from '../../core/util/time';
 import { centerOn } from '../../core/canvas/camera';
 import { useCanvas, useFrame } from './context';
@@ -26,7 +26,7 @@ export function Minimap() {
     const render = () => {
       const b = ctl.allContentBounds();
       const v = engine.view;
-      let r = b ?? v;
+      let r = b ? unionRect(b, v) : v;
       const pad = Math.max(r.w, r.h) * 0.06 + 40;
       r = { x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad };
       worldRef.current = r;
@@ -59,8 +59,14 @@ export function Minimap() {
       clearTimeout(t);
       t = setTimeout(render, 400);
     });
+    // the view left the overview: widen it
+    const offSettle = engine.settled.on((v) => {
+      const w = worldRef.current;
+      if (!w || v.x < w.x || v.y < w.y || v.x + v.w > w.x + w.w || v.y + v.h > w.y + w.h) render();
+    });
     return () => {
       off();
+      offSettle();
       clearTimeout(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
