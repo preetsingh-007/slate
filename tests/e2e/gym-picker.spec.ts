@@ -49,6 +49,14 @@ test.describe('topic picker (G1, G2, G3)', () => {
     await expect(page.locator('.gym-picker-warn')).toContainText('Not a topic path');
     await page.getByRole('button', { name: 'Clear' }).click();
     await expect(page.locator('#picker-value')).toHaveText('');
+    // leaving the field keeps a typed path, but drops a half-typed search
+    await input.fill('ml/architectures/transformer/basic');
+    await input.press('Tab');
+    await expect(page.locator('#picker-value')).toHaveText('ml/architectures/transformer/basic');
+    await input.fill('eig');
+    await input.press('Tab');
+    await expect(page.locator('#picker-value')).toHaveText('ml/architectures/transformer/basic');
+    await expect(input).toHaveValue('ml/architectures/transformer/basic');
   });
 
   test('picks problem files, restricted to a topic', async ({ page }) => {

@@ -1,7 +1,7 @@
 /**
  * Full-text search over gym's Markdown (G7), offline from the mirror: titles, paths and
- * text. Every query word must occur (case-insensitive, prefix of a word for the last one so
- * results appear while typing); titles and paths weigh more than the text. Hits point at the
+ * text. Every query word must occur, case-insensitively, anywhere (so results appear while a
+ * word is still being typed); titles and paths weigh more than the text. Hits point at the
  * section (heading anchor) of the first match.
  */
 import { firstHeading, parseFrontMatter } from './frontmatter';

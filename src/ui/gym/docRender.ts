@@ -84,7 +84,7 @@ export function loadImages(article: HTMLElement, file: string, readBlob: (p: str
         const url = URL.createObjectURL(typed);
         urls.push(url);
         img.src = url;
-        return img.decode().catch(() => undefined);
+        return typeof img.decode === 'function' ? img.decode().catch(() => undefined) : undefined;
       }),
     );
   }

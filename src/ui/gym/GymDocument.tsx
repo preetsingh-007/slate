@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefO
 import { Notebook } from 'lucide-react';
 import type { Capture } from '../../core/model/capture';
 import { findGymQuote } from '../../core/gym/locator';
-import { basename, isImage, isMarkdown, resolveLink } from '../../core/gym/paths';
+import { basename, isImage, isMarkdown, mimeOf, resolveLink } from '../../core/gym/paths';
 import { firstHeading } from '../../core/gym/frontmatter';
 import type { LassoResult } from '../sources/LassoOverlay';
 import { toast } from '../common/toast';
@@ -164,7 +164,7 @@ function GymImage({ path }: { path: string }) {
     let live = true;
     void idx.readBlob(path).then((b) => {
       if (!b || !live) return;
-      u = URL.createObjectURL(b.type ? b : new Blob([b], { type: path.endsWith('.svg') ? 'image/svg+xml' : '' }));
+      u = URL.createObjectURL(b.type ? b : new Blob([b], { type: mimeOf(path) }));
       setUrl(u);
     });
     return () => {

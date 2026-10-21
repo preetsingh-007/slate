@@ -192,7 +192,18 @@ function Checklist() {
         >
           <GripVertical size={16} />
         </button>
-        <input type="checkbox" checked={false} aria-label={`Done: ${it.text.trim() || 'empty item'}`} onChange={() => setChecked(t, it.index, true)} />
+        <input
+          type="checkbox"
+          checked={false}
+          aria-label={`Done: ${it.text.trim() || 'empty item'}`}
+          onChange={() => setChecked(t, it.index, true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+              e.preventDefault();
+              remove(it);
+            }
+          }}
+        />
         <input
           type="text"
           className="gym-todo-input"

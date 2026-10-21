@@ -236,8 +236,9 @@ function GymHome({ active }: { active: boolean }) {
   const { value: structure, loading } = useAsync(() => idx.structure(), [idx, idx.revision]);
   const { value: hits } = useAsync<SearchHit[]>(() => (query.trim() ? idx.search(query) : Promise.resolve([])), [idx, idx.revision, query]);
 
+  // focus search with a keyboard and mouse; on touch screens it would pop up the keyboard
   useEffect(() => {
-    if (active) inputRef.current?.focus({ preventScroll: true });
+    if (active && typeof matchMedia !== 'undefined' && matchMedia('(pointer: fine)').matches) inputRef.current?.focus({ preventScroll: true });
   }, [active]);
 
   const empty = idx.files.list().length === 0;

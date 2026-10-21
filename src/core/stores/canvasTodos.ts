@@ -91,19 +91,26 @@ export class CanvasTodoIndex {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private running: Promise<void> | null = null;
   private offs: (() => void)[] = [];
+  private slugs: string;
 
   constructor(
     store: CanvasStore,
     private docs: DocStore,
     private delay = 150,
   ) {
+    this.slugs = slugsOf(store);
     this.offs.push(
       docs.onDocChanged.on(({ docId }) => {
         if (!parseSegmentDocId(docId)) return;
         this.dirty.add(docId);
         this.schedule();
       }),
+      // the list also changes when segment bounds are recorded: re-read everything only
+      // when canvases come or go (new segments arrive through onDocChanged anyway)
       store.onChange.on(() => {
+        const slugs = slugsOf(store);
+        if (slugs === this.slugs) return;
+        this.slugs = slugs;
         this.full = true;
         this.schedule();
       }),
@@ -148,6 +155,13 @@ export class CanvasTodoIndex {
     return groupByDay(this.all());
   }
 }
+
+const slugsOf = (store: CanvasStore) =>
+  store
+    .list()
+    .map((m) => m.slug)
+    .sort()
+    .join('\n');
 
 async function stateDoc(docs: DocStore, docId: string): Promise<Y.Doc | null> {
   const state = await docs.getState(docId);

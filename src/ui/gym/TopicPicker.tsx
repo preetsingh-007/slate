@@ -149,8 +149,11 @@ export function GymTopicPicker({ kind, value, onChange, topic, label, autoFocus 
           }}
           onFocus={() => setOpen(true)}
           onBlur={() => {
-            // a click on an option commits first (mousedown is prevented on the list)
-            if (text !== value) commit(text);
+            // a click on an option commits first (mousedown is prevented on the list). Leaving
+            // keeps a typed path (or an emptied field) but drops a half-typed search
+            const t = text.trim();
+            if (t !== value && (t === '' || known.has(t) || (kind === 'problem' ? isProblemPathShape(t) : isTopicPathShape(t)))) commit(t);
+            else setText(value);
             setOpen(false);
           }}
           onKeyDown={onKeyDown}
