@@ -17,6 +17,7 @@ import {
   Palette,
   RotateCcw,
   Scissors,
+  Send,
   SendToBack,
   Tag,
   Trash2,
@@ -44,6 +45,10 @@ import {
   ungroupSelection,
 } from './actions';
 import { pngDataUrl } from './io';
+import { captureSelection } from './sourceCapture';
+import { useApp } from '../app/store';
+import { dropOnCanvas, sendToCanvas } from '../sources/send';
+import { createPortal } from 'react-dom';
 import { COLOR_NAMES, PEN_COLORS } from './toolStore';
 
 export function SelectionOverlay() {
@@ -141,6 +146,7 @@ function ActionBar({ barRef, objs }: { barRef: React.RefObject<HTMLDivElement | 
   const grouped = objs.some((o) => o.group);
   const custom = services.settings.get().colors;
   const bounds = engine.getSelectionBounds() as Rect;
+  const mainCanvas = useApp((s) => s.canvas);
 
   useEffect(() => {
     setMenu(null);
@@ -188,6 +194,7 @@ function ActionBar({ barRef, objs }: { barRef: React.RefObject<HTMLDivElement | 
       )}
       {strokes.length > 0 && btn('Beautify: snap shapes', WandSparkles, () => beautifySelection(actions))}
       {beautified.length > 0 && btn('Restore original ink', RotateCcw, () => restoreSelection(actions))}
+      {c.embedded && slug !== mainCanvas && <SendToMainCanvas />}
       {btn('Mark for gym', Flag, () => c.openMarkDialog())}
       {btn('Tag with topics', Tag, () => c.openTopics({ kind: 'objects', ids: objs.map((o) => o.id) }))}
       <span
@@ -272,6 +279,83 @@ function ActionBar({ barRef, objs }: { barRef: React.RefObject<HTMLDivElement | 
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * S1, S3 for a canvas in the side pane: a tap sends the selected region to the main canvas as
+ * a clip (below the latest content, or into the carry tray when the main canvas is hidden);
+ * dragging the button drops it where it is released on the main canvas.
+ */
+function SendToMainCanvas() {
+  const { actions } = useCanvas();
+  const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
+  const start = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null);
+  const busy = useRef(false);
+  const capture = async () => {
+    const cap = await captureSelection(actions);
+    if (!cap) toast('Select something to send first.');
+    return cap;
+  };
+  const send = async () => {
+    if (busy.current) return;
+    busy.current = true;
+    try {
+      const cap = await capture();
+      if (cap) await sendToCanvas([cap]);
+    } finally {
+      busy.current = false;
+    }
+  };
+  return (
+    <>
+      <button
+        type="button"
+        className="cv-btn"
+        aria-label="Send to canvas"
+        title="Send to the main canvas, or drag onto it"
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          void send();
+        }}
+        onPointerDown={(e) => {
+          if (e.button !== 0) return;
+          e.currentTarget.setPointerCapture(e.pointerId);
+          start.current = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
+        }}
+        onPointerMove={(e) => {
+          const st = start.current;
+          if (!st || st.id !== e.pointerId) return;
+          if (!st.moved && Math.hypot(e.clientX - st.x, e.clientY - st.y) < 6) return;
+          st.moved = true;
+          setDrag({ x: e.clientX, y: e.clientY });
+        }}
+        onPointerUp={async (e) => {
+          const st = start.current;
+          start.current = null;
+          setDrag(null);
+          if (!st) return;
+          if (!st.moved) return void send();
+          const cap = await capture();
+          if (!cap) return;
+          if (await dropOnCanvas([cap], e.clientX, e.clientY)) toast('Dropped on the canvas');
+        }}
+        onPointerCancel={() => {
+          start.current = null;
+          setDrag(null);
+        }}
+      >
+        <Send size={18} />
+      </button>
+      {drag &&
+        createPortal(
+          <div className="cv-carry-ghost cv-send-ghost" style={{ transform: `translate(${drag.x - 30}px, ${drag.y - 20}px)` }} aria-hidden>
+            <Send size={16} />
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
 

@@ -1240,6 +1240,13 @@
   width: 100%;
 }
 
+/* the region being dragged from a side-pane canvas to the main one (S3) */
+.cv-send-ghost {
+  width: auto;
+  padding: 8px 12px;
+  color: var(--accent);
+}
+
 @media (max-width: 700px) {
   .cv-carry {
     top: auto;

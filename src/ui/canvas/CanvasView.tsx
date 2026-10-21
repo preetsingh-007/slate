@@ -12,7 +12,8 @@ import { useApp } from '../app/store';
 import { makeMark } from '../../core/canvas/marks';
 import { uid } from '../../core/util/ids';
 import * as registries from '../common/registries';
-import { registerCanvasApi, canvasApi, type CanvasApi } from '../common/registries';
+import { registerCanvasApi, unregisterCanvasApi, type CanvasApi } from '../common/registries';
+import { canvasPositionId, readingPosition, saveReadingPosition } from '../../core/library/positions';
 import { toast } from '../common/toast';
 import { CanvasCtx, setActiveView, isActiveView, getActiveView, type CanvasCtxValue, type TopicTarget } from './context';
 import { CanvasController } from './controller';
@@ -47,6 +48,12 @@ const TOOL_KEYS: Record<string, Tool> = { p: 'pen', m: 'highlighter', e: 'eraser
 const testHook: Record<string, { engine: CanvasEngine; ctl: CanvasController; actions: ActionCtx; api: CanvasApi }> = {};
 if (import.meta.env.VITE_SLATE_E2E && typeof window !== 'undefined') Object.assign(window, { __slateCanvas: testHook, __slateApp: useApp, __slateRegistries: registries });
 
+function deferred(): { promise: Promise<void>; resolve(): void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => (resolve = r));
+  return { promise, resolve };
+}
+
 function isEditable(t: EventTarget | null): boolean {
   const el = t instanceof Element ? t : null;
   if (!el) return false;
@@ -62,6 +69,9 @@ export function CanvasView({ slug, embedded = false }: { slug: string; embedded?
   const [engine, setEngine] = useState<CanvasEngine | null>(null);
   const ctl = useMemo(() => new CanvasController(services, slug), [services, slug]);
   const [ready, setReady] = useState(false);
+  // requests from other areas (reveal a region or an object) wait for the first view, which
+  // would otherwise replace their scroll
+  const firstView = useMemo(() => deferred(), [ctl]);
 
   useLayoutEffect(() => {
     if (!root.current || !display.current || !wet.current) return;
@@ -92,12 +102,27 @@ export function CanvasView({ slug, embedded = false }: { slug: string; embedded?
     void (async () => {
       await ctl.loadForView(null);
       if (!alive) return;
-      engine.jumpToNow(false);
+      // P3: a canvas in the side pane reopens where it was; the main canvas follows C20
+      const saved = embedded ? readingPosition(services.settings, canvasPositionId(slug))?.locator : undefined;
+      if (saved?.type === 'canvas' && saved.region.w > 0) {
+        const zoom = engine.width ? engine.width / (saved.region.w * engine.base) : 1;
+        engine.setCamera({ x: saved.region.x, y: saved.region.y, zoom });
+      } else engine.jumpToNow(false);
       await ctl.loadForView(engine.view);
       if (!alive) return;
+      firstView.resolve();
       setReady(true);
     })();
-    const offSettle = engine.settled.on((v) => void ctl.loadForView({ x: v.x - v.w, y: v.y - v.h, w: v.w * 3, h: v.h * 3 }));
+    let saveTimer: ReturnType<typeof setTimeout> | undefined;
+    const offSettle = engine.settled.on((v) => {
+      void ctl.loadForView({ x: v.x - v.w, y: v.y - v.h, w: v.w * 3, h: v.h * 3 });
+      if (!embedded || !engine.width) return;
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        const region = { x: Math.round(v.x), y: Math.round(v.y), w: Math.round(v.w), h: Math.round(v.h) };
+        void saveReadingPosition(services.settings, canvasPositionId(slug), { type: 'canvas', canvas: slug, region }, services.device);
+      }, 1000);
+    });
     if (!getActiveView() && !embedded) setActiveView(viewId);
     return () => {
       alive = false;
@@ -106,8 +131,9 @@ export function CanvasView({ slug, embedded = false }: { slug: string; embedded?
       mq.removeEventListener('change', onMq);
       window.removeEventListener('resize', onWin);
       offSettle();
+      clearTimeout(saveTimer);
     };
-  }, [engine, ctl, embedded, viewId]);
+  }, [engine, ctl, embedded, viewId, firstView, services, slug]);
 
   const [editing, setEditing] = useState<CanvasCtxValue['editing']>(null);
   const [markDialog, setMarkDialog] = useState<{ id?: string } | null>(null);
@@ -188,6 +214,7 @@ export function CanvasView({ slug, embedded = false }: { slug: string; embedded?
       insertCaptures: (caps: Capture[], at?: { x: number; y: number }) => insertCaptures(actions, caps, at),
       revealObject: (id: string) => {
         void (async () => {
+          await firstView.promise;
           if (!ctl.model.has(id)) await ctl.loadAll();
           const o = ctl.get(id);
           if (!o) return toast('That item is no longer on the canvas.');
@@ -196,17 +223,20 @@ export function CanvasView({ slug, embedded = false }: { slug: string; embedded?
         })();
       },
       revealRegion: (r) => {
-        void ctl.loadForView(r).then(() => engine.revealRegion(r));
+        void firstView.promise.then(() => ctl.loadForView(r)).then(() => engine.revealRegion(r));
       },
       clientToCanvas: (x, y) => engine.clientToCanvas(x, y),
+      embedded,
     };
     registerCanvasApi(slug, api);
-    testHook[slug] = { engine, ctl, actions, api };
+    if (!embedded || !testHook[slug]) testHook[slug] = { engine, ctl, actions, api };
+    if (embedded) testHook[`side:${slug}`] = { engine, ctl, actions, api };
     return () => {
-      if (canvasApi(slug) === api) registerCanvasApi(slug, null);
+      unregisterCanvasApi(slug, api);
       if (testHook[slug]?.engine === engine) delete testHook[slug];
+      if (testHook[`side:${slug}`]?.engine === engine) delete testHook[`side:${slug}`];
     };
-  }, [engine, actions, ctl, slug]);
+  }, [engine, actions, ctl, slug, embedded, firstView]);
 
   // keyboard (C11), clipboard (C15, S9) — only for the canvas used last
   useEffect(() => {

@@ -147,6 +147,20 @@ export function selectionMarkdown(objects: readonly CanvasObject[]): string {
   return parts.join('\n\n');
 }
 
+/**
+ * Text of a canvas region captured as a clip (S2 for a canvas source): the Markdown of its text
+ * boxes and the text of its clips, in reading order. Unlike `selectionMarkdown` clips are not
+ * quoted: the new clip's own source link points back to this canvas.
+ */
+export function regionMarkdown(objects: readonly CanvasObject[]): string {
+  const parts: string[] = [];
+  for (const o of readingOrder(objects)) {
+    if (o.kind === 'text' && o.content.trim()) parts.push(o.content.trim());
+    else if (o.kind === 'clip' && o.text.trim()) parts.push(o.text.trim());
+  }
+  return parts.join('\n\n');
+}
+
 const MD_PATTERNS = [
   /^#{1,6}\s+\S/m,
   /^\s*(?:[-*+]|\d+[.)])\s+\S/m,

@@ -93,17 +93,31 @@ export interface CanvasApi {
   revealRegion(rect: Rect): void;
   /** Converts a client (screen) point to canvas coordinates, or null when outside the canvas. */
   clientToCanvas(x: number, y: number): { x: number; y: number } | null;
+  /** true for a canvas shown in the side pane (P1); the main pane's view of a canvas wins */
+  embedded?: boolean;
 }
 
-const canvasApis = new Map<string, CanvasApi>();
+/** Open views per canvas slug, in registration order (a canvas can be open in both panes). */
+const canvasApis = new Map<string, CanvasApi[]>();
 
+/** Registers a view's API; `null` removes every view of the slug (tests replacing the canvas). */
 export function registerCanvasApi(slug: string, api: CanvasApi | null) {
-  if (api) canvasApis.set(slug, api);
+  if (!api) return void canvasApis.delete(slug);
+  canvasApis.set(slug, [...(canvasApis.get(slug) ?? []).filter((a) => a !== api), api]);
+}
+
+export function unregisterCanvasApi(slug: string, api: CanvasApi) {
+  const rest = (canvasApis.get(slug) ?? []).filter((a) => a !== api);
+  if (rest.length) canvasApis.set(slug, rest);
   else canvasApis.delete(slug);
 }
 
+/** The canvas's API: its main-pane view when it has one, else the latest view. */
 export function canvasApi(slug: string): CanvasApi | undefined {
-  return canvasApis.get(slug);
+  const list = canvasApis.get(slug);
+  if (!list?.length) return undefined;
+  for (let i = list.length - 1; i >= 0; i--) if (!list[i].embedded) return list[i];
+  return list[list.length - 1];
 }
 
 // ---------------------------------------------------------------- links and files from outside

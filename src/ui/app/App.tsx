@@ -5,6 +5,7 @@ import { Workspace } from './Workspace';
 import { CanvasPane } from '../canvas/CanvasPane';
 import { CanvasSwitcher } from '../canvas/CanvasSwitcher';
 import { CarryTray } from '../canvas/CarryTray';
+import { CanvasMount } from '../canvas/register';
 import { ToastHost, useNarrow } from '../common/toast';
 import { GymTopbarButtons } from '../gym/register';
 import { SettingsButton, SyncStatusButton } from '../sync/SyncStatusButton';
@@ -67,6 +68,7 @@ export function App() {
       </header>
       <Workspace canvas={<CanvasPane slug={canvas} />} />
       <SyncMount />
+      <CanvasMount />
       <CarryTray />
       <LibraryMount />
       <ToastHost />

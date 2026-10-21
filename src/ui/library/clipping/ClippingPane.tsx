@@ -115,7 +115,8 @@ function ClippingView({ meta, content }: { meta: ClippingMeta; content: Clipping
     };
   }, [content.markdown, meta.format, assets]);
   useLayoutEffect(() => {
-    if (shownView !== 'reader' || !article.current) return setMap(null);
+    // no map before the Markdown is rendered: an empty text would consume a pending jump (S6)
+    if (shownView !== 'reader' || !article.current || (meta.format !== 'plain' && html == null)) return setMap(null);
     setMap(buildTextMap(article.current));
   }, [shownView, html, meta.format]);
 

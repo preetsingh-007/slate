@@ -3,7 +3,7 @@
  * URIs, and copying to other apps as PNG plus Markdown through the async Clipboard API, with
  * a fallback to the copy event (text only) where the API or image types are unavailable.
  */
-import type { CanvasObject } from '../../core/model/types';
+import type { CanvasObject, Rect } from '../../core/model/types';
 import type { Services } from '../../app/services';
 import { objectsBounds, objectsToSvg } from '../../core/canvas/export';
 import { makePayload, payloadHtml, selectionMarkdown, SLATE_MIME, type ClipboardPayload } from '../../core/canvas/clipboard';
@@ -31,18 +31,21 @@ async function assetUrls(services: Services, objects: readonly CanvasObject[]): 
   return out;
 }
 
-export async function exportSvg(services: Services, objects: readonly CanvasObject[], background?: string): Promise<string> {
+export async function exportSvg(services: Services, objects: readonly CanvasObject[], background?: string, region?: Rect): Promise<string> {
   const urls = await assetUrls(services, objects);
-  return objectsToSvg(objects, { assetHref: (hash) => urls.get(hash) ?? '', inkColor: EXPORT_INK, background, padding: 16 });
+  return objectsToSvg(objects, { assetHref: (hash) => urls.get(hash) ?? '', inkColor: EXPORT_INK, background, padding: region ? 0 : 16, region });
 }
 
-/** Rasterises objects to PNG at `scale` × the 100% size (2 = twice the 100% zoom resolution). */
-export async function exportPng(services: Services, objects: readonly CanvasObject[], scale = 2): Promise<Blob | null> {
-  const b = objectsBounds(objects);
+/**
+ * Rasterises objects to PNG at `scale` × the 100% size (2 = twice the 100% zoom resolution):
+ * their bounds plus a margin, or exactly `region` (objects reaching out of it are cut).
+ */
+export async function exportPng(services: Services, objects: readonly CanvasObject[], scale = 2, region?: Rect): Promise<Blob | null> {
+  const b = region ?? objectsBounds(objects);
   if (!b) return null;
-  const svg = await exportSvg(services, objects, '#ffffff');
-  const w = b.w + 32;
-  const h = b.h + 32;
+  const svg = await exportSvg(services, objects, '#ffffff', region);
+  const w = b.w + (region ? 0 : 32);
+  const h = b.h + (region ? 0 : 32);
   const k = Math.min(scale, 8192 / w, 8192 / h);
   const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
   try {
