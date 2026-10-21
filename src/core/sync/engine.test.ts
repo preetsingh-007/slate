@@ -18,7 +18,7 @@ import { AssetStore } from '../storage/assets';
 import { CanvasStore } from '../stores/canvases';
 import { LibraryStore } from '../stores/library';
 import { FormalizedStore } from '../stores/formalized';
-import { SyncEngine } from './engine';
+import { DEFAULT_TIMINGS, SYNC_RUN_ALLOWANCE_MS, SyncEngine, worstCaseSyncDelayMs } from './engine';
 import { parseFrontMatter } from './derived/frontmatter';
 
 beforeAll(useNodeBlob);
@@ -601,6 +601,16 @@ describe('annotations (R2, R9)', () => {
 });
 
 describe('push timing (R4)', () => {
+  it('a change reaches another online device within 60 s (sync delay NFR)', () => {
+    // R4: push about 20 s after the last change
+    expect(DEFAULT_TIMINGS.pushDelayMs).toBe(20_000);
+    expect(DEFAULT_TIMINGS.maxPushDelayMs).toBeGreaterThanOrEqual(DEFAULT_TIMINGS.pushDelayMs);
+    // continuous editing pushes at the latest maxPushDelayMs after a change; the other device
+    // pulls at most pullIntervalMs later; the runs themselves get an allowance
+    expect(worstCaseSyncDelayMs()).toBe(DEFAULT_TIMINGS.maxPushDelayMs + DEFAULT_TIMINGS.pullIntervalMs + SYNC_RUN_ALLOWANCE_MS);
+    expect(worstCaseSyncDelayMs()).toBeLessThanOrEqual(60_000);
+  });
+
   it('still pushes during continuous editing, at most maxPushDelayMs after the first change', async () => {
     const { repo, dev } = await setup();
     const a = await dev('a', { timings: { pushDelayMs: 300, maxPushDelayMs: 400, pullIntervalMs: 60_000, initialDelayMs: 0 } });

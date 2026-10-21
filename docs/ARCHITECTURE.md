@@ -56,7 +56,7 @@ The canvas UI lives in `src/ui/canvas/`: `engine/` is the imperative core (camer
 
 ## Sync
 
-Sync pulls on open and on returning to the foreground, and pushes about 20 seconds after the last change and when the app goes to the background. Yjs documents merge; JSON files merge field by field; derived files are regenerated, never merged. Commits touch only `journal/` and `library/`.
+Sync pulls on open, on returning to the foreground and every 20 seconds while the app is visible, and pushes about 20 seconds after the last change (at most 30 seconds after the first, so continuous work still goes out) and when the app goes to the background. A change therefore reaches another open device within 60 seconds (`worstCaseSyncDelayMs`). Yjs documents merge; JSON files merge field by field; derived files are regenerated, never merged. Commits touch only `journal/` and `library/`.
 
 The engine is [`core/sync/engine.ts`](../src/core/sync/engine.ts) (`services.sync`); the GitHub API is [`git/github.ts`](../src/core/sync/git/github.ts), whose `commit` is the one place that writes and checks the write scope ([`scope.ts`](../src/core/sync/scope.ts)). A push is up to one commit per scope, library before journal, published with one ref update ([`commits.ts`](../src/core/sync/commits.ts)).
 

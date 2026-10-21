@@ -38,7 +38,7 @@ export function describeStatus(s: SyncStatus, now = Date.now()): string {
 }
 
 /**
- * The phase to draw: a routine background pull takes a moment every 45 s, so "syncing" shows
+ * The phase to draw: a routine background pull takes a moment every 20 s, so "syncing" shows
  * only when a run lasts longer than that, instead of flickering.
  */
 function useShownPhase(phase: SyncStatus['phase']): SyncStatus['phase'] {

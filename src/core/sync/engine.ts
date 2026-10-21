@@ -3,8 +3,9 @@
  * step, in the background.
  *
  * - Local first (R1): every edit is already on disk (DocStore, IndexedDB); sync only reads it.
- * - Pull on start and on returning to the foreground, and every 45 s while visible; push about
- *   20 s after the last change and when the app goes to the background (R4).
+ * - Pull on start and on returning to the foreground, and every 20 s while visible; push about
+ *   20 s after the last change (at most 30 s after the first) and when the app goes to the
+ *   background (R4). Together a change reaches another open device within 60 s (sync delay NFR).
  * - A rejected push (the branch moved) pulls, merges and retries (R4). Documents merge as CRDTs,
  *   JSON files field by field (R2), derived files are regenerated (R6).
  * - An authentication failure pauses sync and asks for a new token; nothing local is touched (R4).
@@ -66,7 +67,25 @@ export interface SyncTimings {
   ensureTimeoutMs: number;
 }
 
-export const DEFAULT_TIMINGS: SyncTimings = { pushDelayMs: 20_000, maxPushDelayMs: 120_000, pullIntervalMs: 45_000, initialDelayMs: 400, ensureTimeoutMs: 8_000 };
+/**
+ * Sync delay NFR: a change on one device appears on another within 60 s when both are online.
+ * The worst case is a change made while editing continues (pushed `maxPushDelayMs` after it)
+ * that lands just after the other device's pull (seen one `pullIntervalMs` later), plus the
+ * time the push and the pull themselves take. Pulls are one cheap request (the branch head)
+ * when nothing changed, so a 20 s interval stays far inside GitHub's rate limit.
+ */
+export const DEFAULT_TIMINGS: SyncTimings = { pushDelayMs: 20_000, maxPushDelayMs: 30_000, pullIntervalMs: 20_000, initialDelayMs: 400, ensureTimeoutMs: 8_000 };
+
+/** Time a push and a pull may take on a slow connection, counted against the sync delay. */
+export const SYNC_RUN_ALLOWANCE_MS = 10_000;
+
+/** Longest time before a change made here is visible on another open device (sync delay NFR). */
+export function worstCaseSyncDelayMs(t: SyncTimings = DEFAULT_TIMINGS): number {
+  return Math.max(t.pushDelayMs, t.maxPushDelayMs) + t.pullIntervalMs + SYNC_RUN_ALLOWANCE_MS;
+}
+
+/** Documents edited in another tab are picked up by a full scan about this often. */
+const FULL_SCAN_MS = 270_000;
 
 const DAY = 24 * 60 * 60 * 1000;
 const MAX_ATTEMPTS = 4;
@@ -474,7 +493,7 @@ export class SyncEngine {
     const interval = setInterval(() => {
       // documents edited in another tab of this browser never reach this tab's change tracking;
       // a full scan every few minutes picks them up (only the tab holding the lock syncs)
-      if (++ticks % 6 === 0) this.fullScan = true;
+      if (++ticks % Math.max(1, Math.round(FULL_SCAN_MS / this.timings.pullIntervalMs)) === 0) this.fullScan = true;
       this.refreshStatus();
       if (!doc || doc.visibilityState === 'visible') void this.sync();
     }, this.timings.pullIntervalMs);
