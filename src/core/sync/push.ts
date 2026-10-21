@@ -244,6 +244,24 @@ export async function push(ctx: SyncContext, opts: PushOptions = {}): Promise<Pu
   for (const d of docOut.values()) if (contents.has(d.docId)) regen.add(d.docId);
   if (regenerateAll) for (const id of contents.keys()) regen.add(id);
 
+  // A mark may cover objects of a neighbouring month: download that segment first, or this
+  // device would render the mark differently from one that has it (canvas.json has each month's
+  // bounds; months without known bounds are not fetched)
+  for (const docId of [...regen]) {
+    const c = contents.get(docId)!;
+    const months = canvases.meta(c.slug)?.segments ?? {};
+    for (const mark of c.marks) {
+      for (const [month, bounds] of Object.entries(months)) {
+        const id = segmentDocId(c.slug, month);
+        const path = segmentPath(c.slug, month);
+        if (month === c.month || contents.has(id) || !bounds || !rectsIntersect(bounds, mark.region) || !st.tree[path]) continue;
+        await mergeDoc(ctx, id, path, st.tree[path]);
+        const content = await ctx.segment(id);
+        if (content) contents.set(id, content);
+      }
+    }
+  }
+
   const repoPaths = opts.repoPaths ?? [];
   const env = (): DerivedEnv => {
     const exists = pathExists([...plan.finalPaths(), ...repoPaths.filter((p) => !p.startsWith('journal/') && !p.startsWith('library/'))]);

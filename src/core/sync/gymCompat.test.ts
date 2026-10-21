@@ -126,6 +126,12 @@ async function buildRepository() {
   await b.sync.sync();
 
   for (const d of [a, b]) expect(d.sync.getStatus(), d.name).toMatchObject({ phase: 'synced' });
+  // derived files are stable: devices with different segments do not rewrite each other's output
+  const commits = repo.log().length;
+  await a.sync.sync();
+  await b.sync.sync();
+  await a.sync.sync();
+  expect(repo.log().length).toBe(commits);
   await a.close();
   await b.close();
   return repo;
