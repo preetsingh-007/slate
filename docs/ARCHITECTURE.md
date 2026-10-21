@@ -41,6 +41,7 @@ All local state is in one IndexedDB database (`slate`), with three object stores
 | kv `secrets`, `prefs` | token, repository, helper; device preferences | never written to the repository |
 | kv `formalized` | parsed `journal/formalized.md` | read only |
 | kv `gym:*` | mirror of gym's files for offline reading | read only |
+| kv `libtext:<id>` | text of a book or clipping for library search (L12), derived on each device | never written |
 | blob `<sha256>` | images, clip images, snapshot resources, book files | `assets/<sha256>.<ext>` (book files only in Git LFS mode) |
 
 ## Canvas
