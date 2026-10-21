@@ -128,14 +128,17 @@ const WINDOW = 1200;
  */
 export function alignAtoms(text: string, start: number, end: number, atoms: Atom[]): (SourceRange | null)[] {
   let cursor = start;
-  const find = (needle: string) => {
+  // words are looked up in the prose only: link targets and maths are masked, so a "." after
+  // a link does not match the ".md" of its target, nor a word a letter inside a formula
+  const prose = text.slice(0, start) + maskForWords(text.slice(start, end));
+  const find = (needle: string, hay = text) => {
     if (!needle) return -1;
-    const i = text.indexOf(needle, cursor);
+    const i = hay.indexOf(needle, cursor);
     return i < 0 || i + needle.length > end || i - cursor > WINDOW ? -1 : i;
   };
   return atoms.map((a) => {
     if (a.kind === 'text') {
-      const i = find(a.text);
+      const i = find(a.text, prose);
       if (i < 0) return null;
       cursor = i + a.text.length;
       return { start: i, end: cursor };
@@ -169,6 +172,14 @@ export function alignAtoms(text: string, start: number, end: number, atoms: Atom
     cursor = close + 1;
     return { start: open, end: close + 1 };
   });
+}
+
+/** Masks link and image targets and maths (same length), leaving the words a reader sees. */
+function maskForWords(s: string): string {
+  const blank = (m: string) => '\u0000'.repeat(m.length);
+  return s
+    .replace(/\$\$[\s\S]+?\$\$|\$(?=\S)(?:\\\$|[^$\n])+?\$/g, blank)
+    .replace(/(\]\()([^)]*)(\))/g, (_m, a: string, url: string, b: string) => a + blank(url) + b);
 }
 
 /**

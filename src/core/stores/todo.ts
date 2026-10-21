@@ -18,5 +18,5 @@ export interface ChecklistItem {
 
 export function readChecklist(doc: Y.Doc): ChecklistItem[] {
   // lenient: a merge of concurrent toggles may leave `[xx]` (see checklist.ts)
-  return parseChecklist(checklistText(doc).toString()).map((t) => ({ index: t.index, text: t.text, checked: t.checked }));
+  return parseChecklist(checklistText(doc).toString()).map((t) => ({ index: t.index, text: t.text.trim(), checked: t.checked }));
 }

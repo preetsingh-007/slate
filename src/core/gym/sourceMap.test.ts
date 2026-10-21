@@ -37,6 +37,17 @@ describe('rendered region → Markdown source (S2, G7)', () => {
     expect(r.map((x) => (x ? src.slice(x.start, x.end) : null))).toEqual(['A', 'basis', 'of', '$V$', 'is', null, 'space', '$$\\dim V$$']);
   });
 
+  it('does not match words inside link targets or formulas', () => {
+    const src = 'see [problem 1](problems/001.md). Then V is $V$ and V.';
+    const atoms: Atom[] = ['see', 'problem', '1.', 'Then', 'V', 'is', 'and', 'V.'].map((t) => ({ kind: 'text', text: t }) as Atom);
+    atoms.splice(6, 0, { kind: 'math', tex: 'V' });
+    const r = alignAtoms(src, 0, src.length, atoms).map((x) => (x ? [x.start, src.slice(x.start, x.end)] : null));
+    expect(r[2]).toBeNull(); // "1." is split by the link in the source
+    expect(r[4]).toEqual([src.indexOf('V is'), 'V']);
+    expect(r[6]).toEqual([src.indexOf('$V$'), '$V$']);
+    expect(r[8]).toEqual([src.lastIndexOf('V.'), 'V.']);
+  });
+
   it('widens a partial selection to balanced links, emphasis and code', () => {
     const src = 'See the **very important** result in [the notes](n.md) and `code here` with $A^*$ ok.';
     const at = (w: string) => src.indexOf(w);

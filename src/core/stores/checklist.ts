@@ -15,6 +15,7 @@ export interface ChecklistLine {
   /** position among the items (task lines only) */
   index: number;
   checked: boolean;
+  /** the item's text as stored (not trimmed) */
   text: string;
   /** offsets in the text: line start, line end (before the newline), the `[` and the item text */
   lineStart: number;
@@ -37,7 +38,8 @@ export function parseChecklist(s: string): ChecklistLine[] {
       out.push({
         index: out.length,
         checked: /x/i.test(m[2]),
-        text: m[4].trim(),
+        // untrimmed, so a trailing space survives while it is being typed
+        text: m[4],
         lineStart: pos,
         lineEnd: pos + line.length,
         box,
