@@ -23,6 +23,10 @@ const EXT: Record<string, string> = {
   'font/woff': 'woff',
   'font/ttf': 'ttf',
   'font/otf': 'otf',
+  // snapshot resources (L8)
+  'text/javascript': 'js',
+  'image/x-icon': 'ico',
+  'image/bmp': 'bmp',
 };
 
 /** File extension for a MIME type (`bin` when unknown). */

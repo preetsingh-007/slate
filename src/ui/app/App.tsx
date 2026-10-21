@@ -9,6 +9,7 @@ import { ToastHost, useNarrow } from '../common/toast';
 import { GymTopbarButtons } from '../gym/register';
 import { SettingsButton, SyncStatusButton } from '../sync/SyncStatusButton';
 import { SyncMount } from '../sync/SyncMount';
+import { LibraryButtons, LibraryMount } from '../library/register';
 
 export function App() {
   const canvas = useApp((s) => s.canvas);
@@ -26,6 +27,7 @@ export function App() {
       <header className="topbar" role="toolbar" aria-label="App">
         <span className="title">Slate</span>
         <CanvasSwitcher />
+        <LibraryButtons />
         <span className="spacer" />
         <GymTopbarButtons />
         <SyncStatusButton />
@@ -49,6 +51,7 @@ export function App() {
       <Workspace canvas={<CanvasPane slug={canvas} />} />
       <SyncMount />
       <CarryTray />
+      <LibraryMount />
       <ToastHost />
     </div>
   );

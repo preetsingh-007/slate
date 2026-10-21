@@ -41,6 +41,7 @@ All local state is in one IndexedDB database (`slate`), with three object stores
 | kv `secrets`, `prefs` | token, repository, helper; device preferences | never written to the repository |
 | kv `formalized` | parsed `journal/formalized.md` | read only |
 | kv `gym:*` | mirror of gym's files for offline reading | read only |
+| kv `libtext:<id>` | text of a book or clipping for library search (L12), derived on each device | never written |
 | blob `<sha256>` | images, clip images, snapshot resources, book files | `assets/<sha256>.<ext>` (book files only in Git LFS mode) |
 
 ## Canvas
@@ -69,3 +70,12 @@ The engine is [`core/sync/engine.ts`](../src/core/sync/engine.ts) (`services.syn
 | `formalized.md` | parsed into `services.formalized` | never written |
 
 Other areas download content on demand before opening it: `canvases.model(slug)` already asks sync for each month it loads; call `services.sync.ensureDoc(annotationsDocId(id))` before opening a book's or clipping's annotations, `services.sync.ensureClipping(id)` before reading a clipping's content, and `services.sync.ensureBookFile(id)` for a book file in Git LFS mode. `services.gymFiles` is the offline mirror of gym's Markdown and images, refreshed on every pull.
+
+## Library
+
+Books (PDF, EPUB) and clippings open in the side pane (`src/ui/library/`); the logic is in `src/core/library/` and `src/core/html/toMarkdown.ts`.
+
+- Book files are stored by SHA-256 in the asset store; a book synced without its file asks for it and matches the re-imported file by hash. Annotations live in `ann:<item id>`; PDF ink is stored in units of the page width.
+- Clippings are read-only after creation. New from link goes through the fetch helper only: Readability gives the Reader view; the snapshot (HTML plus images, stylesheets, their `url()` resources and scripts, stored as `assets/<hash>.<ext>`) gives the Original view.
+- Snapshots render only in `public/snapshot.html`, loaded with `sandbox="allow-scripts"` (never `allow-same-origin`) and fed over `postMessage`. Its own CSP allows no network and only its bootstrap script (by hash) and `blob:` scripts; after editing that script run `node scripts/snapshot-csp.mjs`.
+- Text-quote anchors (highlights, notes, clip source links) are offsets into the text walk of `documentText` (`core/library/snapshot.ts`), which the viewers and the snapshot frame share.
