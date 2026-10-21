@@ -51,6 +51,8 @@ Strokes and shapes store absolute canvas coordinates; their header `x, y, w, h` 
 
 Rendering: strokes and shapes are drawn on canvas tiles (only visible tiles, cached per zoom level); text boxes, images and clips are DOM elements, mounted only when visible, under the ink layer.
 
+The canvas UI lives in `src/ui/canvas/`: `engine/` is the imperative core (camera, pointer input, tiled ink layer, wet layer), `controller.ts` wraps the model for one open canvas (segment loading, day lines on add, dependents on delete), `actions.ts` holds the selection actions, and React components render the DOM objects, overlays, toolbar and dialogs. Pure logic (camera, tiles, hit testing, eraser, transforms, space insertion, day lines, marks, clipboard formats) is in `src/core/canvas/`. Other areas reach a canvas only through `ui/common/registries.ts` (`canvasApi(slug)`, selection actions, topic picker, source openers).
+
 ## Sync
 
 Sync pulls on open and on returning to the foreground, and pushes about 20 seconds after the last change and when the app goes to the background. Yjs documents merge; JSON files merge field by field; derived files are regenerated, never merged. Commits touch only `journal/` and `library/`.

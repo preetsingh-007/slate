@@ -196,4 +196,51 @@ test.describe('lasso and selection actions (C14, C15)', () => {
     expect(objs[0].beautifiedInto).toBeUndefined();
     expect(await selection(page)).toEqual([objs[0].id]);
   });
+
+  test('shapes are editable: line ends drag and glue to a shape; recolour and line width (C10)', async ({ page }) => {
+    await openCanvas(page);
+    const [box, arrow] = await seed(page, [
+      { kind: 'shape', shape: 'rectangle', geometry: { kind: 'rectangle', cx: 500, cy: 200, w: 160, h: 100, rotation: 0 }, color: '#1f2328', lineWidth: 2, originals: [], x: 420, y: 150, w: 160, h: 100 },
+      { kind: 'shape', shape: 'arrow', geometry: { kind: 'arrow', a: { x: 100, y: 200 }, b: { x: 300, y: 200 }, heads: 'end' }, color: '#1f2328', lineWidth: 2, originals: [], x: 100, y: 190, w: 200, h: 20 },
+    ]);
+    await page.getByRole('radio', { name: /^Lasso/ }).click();
+    await withCanvas(page, `(h) => h.engine.select(['${arrow}'])`);
+    const end = await page.locator('[data-handle="b"]').boundingBox();
+    const target = await toClient(page, 421, 200);
+    await dragClient(page, [end!.x + 9, end!.y + 9], target);
+    const a = (await objects(page)).find((o) => o.id === arrow)! as unknown as { geometry: { b: { x: number } }; connects: [string | null, string | null] };
+    expect(a.geometry.b.x).toBeCloseTo(421, -1);
+    expect(a.connects).toEqual([null, box]);
+    // moving the box drags the glued end along
+    await withCanvas(page, `(h) => h.engine.select(['${box}'])`);
+    const from = await toClient(page, 540, 180);
+    const k = await withCanvas<number>(page, '(h) => h.engine.pxPerUnit');
+    await dragClient(page, from, [from[0], from[1] + 100 * k]);
+    const a2 = (await objects(page)).find((o) => o.id === arrow)! as unknown as { geometry: { a: { y: number }; b: { y: number } } };
+    expect(a2.geometry.b.y).toBeCloseTo(300, 0);
+    expect(a2.geometry.a.y).toBe(200);
+    // recolour and line width
+    await bar(page).getByRole('button', { name: 'Colour' }).click();
+    await bar(page).getByRole('button', { name: 'Line width 4' }).click();
+    expect(((await objects(page)).find((o) => o.id === box) as unknown as { lineWidth: number }).lineWidth).toBe(4);
+  });
+
+  test('keyboard: select objects in reading order, nudge, delete (accessibility)', async ({ page }) => {
+    await openCanvas(page);
+    const ids = await scene(page);
+    await page.locator('.cv-root').focus();
+    await page.keyboard.press('Alt+ArrowRight');
+    const first = await selection(page);
+    expect(first).toHaveLength(1);
+    await page.keyboard.press('Alt+ArrowRight');
+    const second = await selection(page);
+    expect(second[0]).not.toBe(first[0]);
+    const before = (await objects(page)).find((o) => o.id === second[0])!;
+    await page.keyboard.press('Shift+ArrowDown');
+    const after = (await objects(page)).find((o) => o.id === second[0])!;
+    expect(after.y).toBeGreaterThan(before.y);
+    await page.keyboard.press('Delete');
+    expect((await objects(page)).map((o) => o.id)).not.toContain(second[0]);
+    expect(ids).toContain(second[0]);
+  });
 });

@@ -36,6 +36,7 @@ import {
 } from './actions';
 import { insertCaptures } from './captures';
 import { translateObject } from '../../core/canvas/transform';
+import { readingOrder } from '../../core/canvas/clipboard';
 import { panBy } from '../../core/canvas/camera';
 import { useTools, type Tool } from './toolStore';
 import './canvas.css';
@@ -263,7 +264,7 @@ export function CanvasView({ slug, embedded = false }: { slug: string; embedded?
         }
         return;
       }
-      if (e.altKey) return;
+      if (e.altKey && !k.startsWith('Arrow')) return;
       if (k === 'Escape') {
         if (cropping) setCropping(null);
         else engine.clearSelection();
@@ -295,6 +296,16 @@ export function CanvasView({ slug, embedded = false }: { slug: string; embedded?
       if (k === 'Enter' && sel.length === 1 && ctl.get(sel[0])?.kind === 'text') {
         e.preventDefault();
         setEditing({ id: sel[0] });
+        return;
+      }
+      if (e.altKey && (k === 'ArrowRight' || k === 'ArrowLeft')) {
+        // keyboard selection: the next or previous object in view, in reading order
+        e.preventDefault();
+        const inView = readingOrder(ctl.model.query(engine.view).filter((o) => !(o.kind === 'stroke' && o.beautifiedInto)));
+        if (!inView.length) return;
+        const cur = inView.findIndex((o) => o.id === sel[0]);
+        const next = cur < 0 ? (k === 'ArrowRight' ? 0 : inView.length - 1) : (cur + (k === 'ArrowRight' ? 1 : -1) + inView.length) % inView.length;
+        engine.select([inView[next].id]);
         return;
       }
       if (k.startsWith('Arrow')) {

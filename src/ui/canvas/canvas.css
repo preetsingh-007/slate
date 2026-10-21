@@ -878,7 +878,13 @@
   top: 0;
   border-radius: 8px;
   background: var(--flash);
-  animation: cv-flash 2s ease-out forwards;
+}
+
+/* with reduced motion the flash stays still for its 2 seconds */
+@media (prefers-reduced-motion: no-preference) {
+  .cv-flash {
+    animation: cv-flash 2s ease-out forwards;
+  }
 }
 
 @keyframes cv-flash {

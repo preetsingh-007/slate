@@ -57,6 +57,7 @@ export const SHORTCUTS: [string, string][] = [
   ['⌘G / ⇧⌘G', 'Group / ungroup'],
   ['] / [', 'Bring forward / send back'],
   ['⌘A', 'Select everything in view'],
+  ['⌥→ / ⌥←', 'Select the next / previous object in view'],
   ['Arrows', 'Nudge the selection (Shift: 10×), or pan'],
   ['⌘= / ⌘− / ⌘0', 'Zoom in / out / 100%'],
   ['⇧1 / ⇧2', 'Fit all / fit selection'],

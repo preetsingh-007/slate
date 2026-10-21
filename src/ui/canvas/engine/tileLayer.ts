@@ -11,7 +11,7 @@ import type { Camera } from '../../../core/canvas/camera';
 import { objectBounds } from '../../../core/canvas/bounds';
 import { levelFor, levelScale, TILE_PX, TileCache, tileKey, tileRect, tilesFor, type TileId } from '../../../core/canvas/tiles';
 import { compareZ } from '../../../core/util/zindex';
-import { ctx2d, drawInk, makeCanvas } from './draw';
+import { ctx2d, drawInk, makeCanvas, pathCache } from './draw';
 
 type Bitmap = HTMLCanvasElement | OffscreenCanvas;
 
@@ -88,6 +88,7 @@ export class TileLayer {
     for (const id of change.removed) {
       pushKnown(rects, this.known.get(id));
       this.known.delete(id);
+      pathCache.delete(id);
     }
     for (const id of change.changed) {
       const o = this.model.get(id);
