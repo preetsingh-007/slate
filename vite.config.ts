@@ -16,7 +16,7 @@ const CSP = [
   "media-src 'self' blob:",
   "frame-src 'self' blob:",
   "worker-src 'self' blob:",
-  "connect-src 'self' https://api.github.com https://*.workers.dev blob: data:",
+  `connect-src 'self' https://api.github.com https://*.workers.dev blob: data:${process.env.SLATE_E2E ? ' http://localhost:4455' : ''}`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'none'",

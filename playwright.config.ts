@@ -26,7 +26,7 @@ export default defineConfig({
     },
   ],
   webServer: [
-    { command: 'npm run build && npm run preview', port: 4173, reuseExistingServer: true, timeout: 180_000 },
+    { command: 'SLATE_E2E=1 npm run build && npm run preview', port: 4173, reuseExistingServer: true, timeout: 180_000 },
     { command: 'node tests/e2e/server.mjs --port 4455', port: 4455, reuseExistingServer: true },
   ],
 });

@@ -8,6 +8,7 @@ import { DocStore } from '../core/storage/docstore';
 import { SlateDB } from '../core/storage/idb';
 import { getDeviceId } from '../core/util/ids';
 import { CanvasStore } from '../core/stores/canvases';
+import { FormalizedStore } from '../core/stores/formalized';
 import { LibraryStore } from '../core/stores/library';
 import { SettingsStore } from '../core/stores/settings';
 
@@ -18,6 +19,7 @@ export interface Services {
   settings: SettingsStore;
   canvases: CanvasStore;
   library: LibraryStore;
+  formalized: FormalizedStore;
   device: string;
 }
 
@@ -29,7 +31,8 @@ export async function createServices(dbName = 'slate'): Promise<Services> {
   const assets = new AssetStore(db, () => !!settings.get().lfs);
   const canvases = await CanvasStore.open(db, docs, device);
   const library = await LibraryStore.open(db);
-  return { db, docs, assets, settings, canvases, library, device };
+  const formalized = await FormalizedStore.open(db);
+  return { db, docs, assets, settings, canvases, library, formalized, device };
 }
 
 export const ServicesContext = createContext<Services | null>(null);

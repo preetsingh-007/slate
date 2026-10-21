@@ -100,14 +100,17 @@ export interface ClipObject extends ObjectHeader {
 
 export type ShapeKind = 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'triangle' | 'diamond';
 
-/** Shape geometry in absolute canvas units. */
+/** Shape geometry in absolute canvas units (same form as Axiom's recognizer output). */
 export type ShapeGeometry =
   | { kind: 'line'; a: Pt; b: Pt }
+  /** a = tail, b = tip; `heads: 'both'` draws a head at `a` too */
   | { kind: 'arrow'; a: Pt; b: Pt; heads: 'end' | 'both' }
-  | { kind: 'rectangle'; corners: [Pt, Pt, Pt, Pt] }
-  | { kind: 'ellipse'; cx: number; cy: number; rx: number; ry: number; angle: number }
-  | { kind: 'triangle'; corners: [Pt, Pt, Pt] }
-  | { kind: 'diamond'; corners: [Pt, Pt, Pt, Pt] };
+  | { kind: 'circle'; cx: number; cy: number; r: number }
+  /** rotation in degrees (clockwise, y down), rx along the rotated x axis */
+  | { kind: 'ellipse'; cx: number; cy: number; rx: number; ry: number; rotation: number }
+  | { kind: 'rectangle'; cx: number; cy: number; w: number; h: number; rotation: number }
+  | { kind: 'triangle'; points: [Pt, Pt, Pt] }
+  | { kind: 'diamond'; cx: number; cy: number; w: number; h: number };
 
 export interface Pt {
   x: number;
