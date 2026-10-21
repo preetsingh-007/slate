@@ -11,7 +11,7 @@
  *
  * Results are cached; math is spliced in after sanitising so DOMPurify only sees prose.
  */
-import { Marked, type TokenizerAndRendererExtension, type Tokens } from 'marked';
+import { Marked, type Token, type TokenizerAndRendererExtension, type Tokens } from 'marked';
 import DOMPurify from 'dompurify';
 import katex from 'katex';
 import { LRU } from '../util/lru';
@@ -122,7 +122,7 @@ marked.use({
     },
     heading({ tokens, depth }) {
       const inner = this.parser.parseInline(tokens);
-      let slug = githubSlug(tokens.map((t) => ('text' in t ? t.text : t.raw)).join(''));
+      let slug = headingSlug(tokens);
       if (slugCounts) {
         const n = slugCounts.get(slug) ?? 0;
         slugCounts.set(slug, n + 1);
@@ -182,6 +182,20 @@ export function renderInline(text: string): string {
   const html = run(text, true);
   htmlCache.set(key, html);
   return html;
+}
+
+/**
+ * Block tokens of a Markdown text from the same parser and extensions as `renderMarkdown`
+ * (maths included), with each token's `raw` source. The gym reader uses it to map rendered
+ * blocks back to their source (G7, S2).
+ */
+export function lexMarkdown(text: string): Token[] {
+  return marked.lexer(text);
+}
+
+/** The anchor slug `renderMarkdown` gives a heading token (before de-duplication). */
+export function headingSlug(tokens: Token[]): string {
+  return githubSlug(tokens.map((t) => ('text' in t ? t.text : t.raw)).join(''));
 }
 
 /** Sanitises arbitrary HTML (clipboard, pages) with the same policy as rendered Markdown. */

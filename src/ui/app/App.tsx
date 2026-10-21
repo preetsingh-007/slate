@@ -4,6 +4,7 @@ import { useApp } from './store';
 import { Workspace } from './Workspace';
 import { CanvasPane } from '../canvas/CanvasPane';
 import { ToastHost, useNarrow } from '../common/toast';
+import { GymTopbarButtons } from '../gym/register';
 
 export function App() {
   const canvas = useApp((s) => s.canvas);
@@ -21,6 +22,7 @@ export function App() {
       <header className="topbar" role="toolbar" aria-label="App">
         <span className="title">Slate</span>
         <span className="spacer" />
+        <GymTopbarButtons />
         {narrow && hasTabs && (
           <button
             className="icon-btn"

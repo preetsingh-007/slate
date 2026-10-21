@@ -64,6 +64,8 @@ async function cloneWithStyles(el: Element): Promise<Element> {
     if (child.nodeType === Node.ELEMENT_NODE) {
       const tag = (child as Element).tagName;
       if (tag === 'SCRIPT' || tag === 'IFRAME') continue;
+      // KaTeX's MathML copy is hidden with `clip`, which the clone does not carry: skip it
+      if ((child as Element).classList.contains('katex-mathml')) continue;
       clone.appendChild(await cloneWithStyles(child as Element));
     } else if (child.nodeType === Node.TEXT_NODE) clone.appendChild(child.cloneNode());
   }
@@ -86,7 +88,9 @@ export async function rasterizeRegion(container: HTMLElement, rect: DOMRect, sca
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}" viewBox="${ox} ${oy} ${rect.width} ${rect.height}">` +
     `<foreignObject x="0" y="0" width="${width}" height="${height}">${xml}</foreignObject></svg>`;
-  const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+  // a data: URL, not a blob: URL: Chromium taints a canvas drawn from a blob-URL SVG that
+  // contains a foreignObject, so toBlob would always fail there
+  const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   try {
     const img = new Image();
     img.decoding = 'async';
@@ -111,7 +115,5 @@ export async function rasterizeRegion(container: HTMLElement, rect: DOMRect, sca
     return blob ? { blob, w: rect.width, h: rect.height } : null;
   } catch {
     return null;
-  } finally {
-    URL.revokeObjectURL(url);
   }
 }
