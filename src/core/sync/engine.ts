@@ -56,6 +56,8 @@ export interface SyncStatus {
 export interface SyncTimings {
   /** R4: push about 20 s after the last change */
   pushDelayMs: number;
+  /** push at the latest this long after the first unpushed change, even while editing continues */
+  maxPushDelayMs: number;
   /** pull interval while the app is visible (a change appears on another device within 60 s) */
   pullIntervalMs: number;
   /** first sync after start */
@@ -64,7 +66,7 @@ export interface SyncTimings {
   ensureTimeoutMs: number;
 }
 
-export const DEFAULT_TIMINGS: SyncTimings = { pushDelayMs: 20_000, pullIntervalMs: 45_000, initialDelayMs: 400, ensureTimeoutMs: 8_000 };
+export const DEFAULT_TIMINGS: SyncTimings = { pushDelayMs: 20_000, maxPushDelayMs: 120_000, pullIntervalMs: 45_000, initialDelayMs: 400, ensureTimeoutMs: 8_000 };
 
 const DAY = 24 * 60 * 60 * 1000;
 const MAX_ATTEMPTS = 4;
@@ -120,7 +122,13 @@ export class SyncEngine {
   private ensuring = new Map<string, Promise<void>>();
   private repoPaths: string[] = [];
   private lastSettings: unknown;
-  private bg: { timers: ReturnType<typeof setTimeout>[]; interval: ReturnType<typeof setInterval>; pushTimer?: ReturnType<typeof setTimeout>; cleanup: (() => void)[] } | null = null;
+  private bg: {
+    timers: ReturnType<typeof setTimeout>[];
+    interval: ReturnType<typeof setInterval>;
+    pushTimer?: ReturnType<typeof setTimeout>;
+    firstChangeAt?: number;
+    cleanup: (() => void)[];
+  } | null = null;
   private releaseLock: (() => void) | undefined;
   private startGen = 0;
   private offs: (() => void)[] = [];
@@ -477,10 +485,18 @@ export class SyncEngine {
     const bg = this.bg;
     if (!bg) return;
     if (bg.pushTimer) clearTimeout(bg.pushTimer);
+    // ~20 s after the last change, but no later than maxPushDelayMs after the first one, so
+    // continuous work still reaches GitHub
+    const now = this.now();
+    bg.firstChangeAt ??= now;
+    const wait = Math.max(0, Math.min(this.timings.pushDelayMs, bg.firstChangeAt + this.timings.maxPushDelayMs - now));
     bg.pushTimer = setTimeout(() => {
-      if (this.bg) this.bg.pushTimer = undefined;
+      if (this.bg) {
+        this.bg.pushTimer = undefined;
+        this.bg.firstChangeAt = undefined;
+      }
       void this.sync();
-    }, this.timings.pushDelayMs);
+    }, wait);
   }
 
   stop(): void {

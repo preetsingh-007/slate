@@ -592,6 +592,25 @@ describe('annotations (R2, R9)', () => {
   });
 });
 
+describe('push timing (R4)', () => {
+  it('still pushes during continuous editing, at most maxPushDelayMs after the first change', async () => {
+    const { repo, dev } = await setup();
+    const a = await dev('a', { timings: { pushDelayMs: 300, maxPushDelayMs: 400, pullIntervalMs: 60_000, initialDelayMs: 0 } });
+    a.sync.start();
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    for (let i = 0; i < 200 && repo.log().length < 3; i++) await wait(10);
+    const base = repo.log().length;
+    let pushedWhileEditing = false;
+    for (let i = 0; i < 20; i++) {
+      await a.draw([stroke(`c${i}`, T(21), i * 10, 0)]);
+      await wait(60);
+      if (repo.log().length > base) pushedWhileEditing = true;
+    }
+    expect(pushedWhileEditing).toBe(true);
+    a.sync.stop();
+  });
+});
+
 describe('gym mirror (G1, G7, G8)', () => {
   it('mirrors gym Markdown and referenced images for offline reading', async () => {
     const { repo, dev } = await setup();
