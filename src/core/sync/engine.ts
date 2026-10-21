@@ -86,7 +86,7 @@ export interface VerifyResult {
 
 export interface SyncEngineOptions {
   /** GitHub API base (test builds point it at a mock); default https://api.github.com */
-  apiBase?: string;
+  apiBase?: string | (() => string | undefined);
   timings?: Partial<SyncTimings>;
   /** Web Locks name so only one tab syncs */
   lockName?: string;
@@ -164,7 +164,8 @@ export class SyncEngine {
   // ================================================================ configuration
 
   private apiBase(): string {
-    return (this.opts.apiBase ?? GITHUB_API).replace(/\/+$/, '');
+    const base = typeof this.opts.apiBase === 'function' ? this.opts.apiBase() : this.opts.apiBase;
+    return (base || GITHUB_API).replace(/\/+$/, '');
   }
 
   private makeRemote(input: ConnectInput): GitHubRemote {

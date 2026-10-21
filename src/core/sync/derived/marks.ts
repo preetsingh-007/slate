@@ -19,13 +19,15 @@ export type Rasterizer = (svg: string, width: number, height: number) => Promise
 
 /** Twice the 100% zoom resolution (G5). */
 export const MARK_SCALE = 2;
-/** Longest PNG side; larger regions are scaled down to fit (memory on iPad). */
+/** Longest PNG side; larger regions are scaled down to fit. */
 export const MARK_MAX_PX = 8192;
+/** Largest canvas area iPad Safari allows (16.7 megapixels). */
+export const MARK_MAX_AREA = 16_000_000;
 
 export function markPngSize(region: Rect): { w: number; h: number } {
   let w = Math.max(1, region.w * MARK_SCALE);
   let h = Math.max(1, region.h * MARK_SCALE);
-  const k = Math.min(1, MARK_MAX_PX / Math.max(w, h));
+  const k = Math.min(1, MARK_MAX_PX / Math.max(w, h), Math.sqrt(MARK_MAX_AREA / (w * h)));
   w = Math.max(1, Math.round(w * k));
   h = Math.max(1, Math.round(h * k));
   return { w, h };

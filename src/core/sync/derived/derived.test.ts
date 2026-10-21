@@ -143,6 +143,8 @@ describe('mark files (G5)', () => {
     const png = decodePng(await stubRasterizer(svg, size.w, size.h));
     expect([png.width, png.height]).toEqual([840, 440]);
     expect(markPngSize({ x: 0, y: 0, w: 10000, h: 100 })).toEqual({ w: 8192, h: 82 });
+    const big = markPngSize({ x: 0, y: 0, w: 4000, h: 4000 });
+    expect(big.w * big.h).toBeLessThanOrEqual(16_000_000);
   });
 });
 

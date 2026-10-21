@@ -4,6 +4,8 @@ import { useApp } from './store';
 import { Workspace } from './Workspace';
 import { CanvasPane } from '../canvas/CanvasPane';
 import { ToastHost, useNarrow } from '../common/toast';
+import { SettingsButton, SyncStatusButton } from '../sync/SyncStatusButton';
+import { SyncMount } from '../sync/SyncMount';
 
 export function App() {
   const canvas = useApp((s) => s.canvas);
@@ -21,6 +23,7 @@ export function App() {
       <header className="topbar" role="toolbar" aria-label="App">
         <span className="title">Slate</span>
         <span className="spacer" />
+        <SyncStatusButton />
         {narrow && hasTabs && (
           <button
             className="icon-btn"
@@ -36,8 +39,10 @@ export function App() {
             <PanelRight size={18} />
           </button>
         )}
+        <SettingsButton />
       </header>
       <Workspace canvas={<CanvasPane slug={canvas} />} />
+      <SyncMount />
       <ToastHost />
     </div>
   );
