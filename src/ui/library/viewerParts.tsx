@@ -23,6 +23,7 @@ export function LassoHost({ active, mode = 'free', onLasso }: { scrollRef?: RefO
     setH(el.clientHeight);
     return () => ro.disconnect();
   }, []);
+  useStylusNoScroll(ref, active);
   return (
     <div ref={ref} className="lasso-sticky" data-no-text>
       {active && (
@@ -32,6 +33,22 @@ export function LassoHost({ active, mode = 'free', onLasso }: { scrollRef?: RefO
       )}
     </div>
   );
+}
+
+/**
+ * On iPad Safari an Apple Pencil is a touch (touchType "stylus") and would scroll the page
+ * under the lasso; cancelling its touchmove lets it draw while fingers still scroll.
+ */
+export function useStylusNoScroll(ref: RefObject<HTMLElement | null>, on: boolean) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !on) return;
+    const stop = (e: TouchEvent) => {
+      for (const t of Array.from(e.touches)) if ((t as Touch & { touchType?: string }).touchType === 'stylus') return e.preventDefault();
+    };
+    el.addEventListener('touchmove', stop, { passive: false });
+    return () => el.removeEventListener('touchmove', stop);
+  }, [ref, on]);
 }
 
 /** A floating panel anchored to a client rect; closes on outside pointer or Escape. */

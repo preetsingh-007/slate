@@ -22,7 +22,7 @@ import { toast } from '../../common/toast';
 import { rasterizeRegion } from '../../sources/rasterize';
 import type { LassoResult } from '../../sources/LassoOverlay';
 import { ClipMark } from '../ClipMarks';
-import { useAnnotations, useClipRefs, useLocalPref, useSettingsVersion } from '../hooks';
+import { useAnnotations, useClipRefs, useKeepScroll, useLocalPref, useSettingsVersion } from '../hooks';
 import { useLibraryUi } from '../state';
 import { buildTextMap, hitInPolygon, rangeFragment, offsetOf, rangeFromOffsets, rangeRectsIn, type TextMap } from '../textMap';
 import { HighlightMenu, LassoHost, NoteEditor, SelectionMenu, copyText } from '../viewerParts';
@@ -70,6 +70,7 @@ export function EpubViewer({ book: meta, onMissing }: { book: BookMeta; onMissin
   const [book, setBook] = useState<EpubBook | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
+  useKeepScroll(scroll);
   const [visible, setVisible] = useState<Set<number>>(() => new Set([0]));
   const restored = useRef(false);
   const [fontSize, setFontSize] = useLocalPref('slate-epub-font', 18);
@@ -197,7 +198,7 @@ export function EpubViewer({ book: meta, onMissing }: { book: BookMeta; onMissin
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const onScroll = () => {
     const el = scroll.current;
-    if (!el || !book) return;
+    if (!el || !book || el.clientWidth === 0) return;
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       const chapters = [...el.querySelectorAll<HTMLElement>('[data-chapter]')];

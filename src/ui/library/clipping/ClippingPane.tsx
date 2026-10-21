@@ -24,7 +24,7 @@ import type { PaneProps } from '../../panes/registry';
 import { rasterizeRegion } from '../../sources/rasterize';
 import type { LassoResult } from '../../sources/LassoOverlay';
 import { ClipList, ClipMark } from '../ClipMarks';
-import { useAnnotations, useClipRefs, useClipping, useLocalPref } from '../hooks';
+import { useAnnotations, useClipRefs, useClipping, useKeepScroll, useLocalPref } from '../hooks';
 import { useLibraryUi } from '../state';
 import { buildTextMap, hitInPolygon, rangeFragment, offsetOf, rangeFromOffsets, rangeRectsIn, type TextMap } from '../textMap';
 import { HighlightMenu, LassoHost, NoteEditor, SelectionMenu, copyText } from '../viewerParts';
@@ -105,6 +105,7 @@ function ClippingView({ meta, content }: { meta: ClippingMeta; content: Clipping
 
   // ---------------------------------------------------------------- Reader view
   const scroll = useRef<HTMLDivElement>(null);
+  useKeepScroll(scroll, undefined, shownView);
   const article = useRef<HTMLDivElement>(null);
   const [html, setHtml] = useState<string | null>(null);
   const [map, setMap] = useState<TextMap | null>(null);

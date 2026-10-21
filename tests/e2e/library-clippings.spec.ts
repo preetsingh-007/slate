@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { annotations, carry, lassoRect, libraryItems, openApp, setHelper } from './libraryHelpers';
+import { annotations, carry, fakeCanvas, lassoRect, libraryItems, openApp, seedClip, setHelper } from './libraryHelpers';
 
 test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
 
@@ -268,6 +268,21 @@ test.describe('annotations and lasso on clippings', () => {
     await expect(page.getByRole('radio', { name: 'Original' })).toHaveAttribute('aria-checked', 'true');
     await expect(page.frameLocator('[data-testid="snapshot-frame"]').locator('[data-flash]').first()).toBeAttached();
   });
+});
+
+test('S7: a clipping marks where clips were taken; the mark lists them and reveals them on the canvas', async ({ page }) => {
+  await openApp(page);
+  await copy(page, { text: '# Notes\n\nThe spectral theorem diagonalizes symmetric matrices.\n\nOther text.' });
+  await page.getByRole('button', { name: 'New from clipboard' }).click();
+  await expect(page.locator('.clip-article p').first()).toBeVisible();
+  const c = (await libraryItems(page)).clippings[0];
+  await fakeCanvas(page);
+  await seedClip(page, 'clipQ', { type: 'clipping', id: c.id, title: 'Notes', capturedAt: 1, contentHash: '', locator: { type: 'clipping', view: 'reader', offset: 6, quote: { exact: 'The spectral theorem diagonalizes', prefix: 'Notes', suffix: ' symmetric' } } }, 'The spectral theorem');
+  const mark = page.locator('.clip-scroll').getByTestId('clip-mark');
+  await expect(mark).toBeVisible({ timeout: 5000 });
+  await mark.click();
+  await page.getByRole('menuitem', { name: /The spectral theorem/ }).click();
+  await expect.poll(() => page.evaluate(() => (window as never as { __revealed: string[] }).__revealed)).toEqual(['clipQ']);
 });
 
 /** Selects text in the clipping Reader view. */

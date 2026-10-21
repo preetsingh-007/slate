@@ -35,9 +35,14 @@ test.describe('books', () => {
 
     // reading position is saved in synced settings
     await page.getByRole('button', { name: 'Search in book' }).click();
-    await page.locator('.pdfv-scroll').evaluate((el) => (el.scrollTop = el.scrollHeight));
+    await expect(page.locator('.viewer-drawer')).toHaveCount(0);
     await expect
-      .poll(() => page.evaluate((id) => (window as never as { __slate: { settings: { get(): { readingPositions: Record<string, { locator: { page: number } }> } } } }).__slate.settings.get().readingPositions[id]?.locator.page, books[0].id))
+      .poll(async () => {
+        // the pages grow back to full width once the drawer is closed: scroll to the end again
+        await page.locator('.pdfv-scroll').evaluate((el) => (el.scrollTop = el.scrollHeight));
+        await page.waitForTimeout(300);
+        return page.evaluate((id) => (window as never as { __slate: { settings: { get(): { readingPositions: Record<string, { locator: { page: number } }> } } } }).__slate.settings.get().readingPositions[id]?.locator.page, books[0].id);
+      })
       .toBe(3);
     await page.reload();
     await page.waitForFunction(() => !!(window as unknown as { __slate?: unknown }).__slate);
@@ -385,4 +390,40 @@ test('L2 @touch: a PDF opens and scrolls on a tablet', async ({ page }) => {
   await expect(page.getByTestId('pdf-page')).toHaveText(/^2\d \/ 40$/);
   // virtualised: only pages near the viewport are in the DOM
   expect(await page.locator('.pdfv-page').count()).toBeLessThan(12);
+});
+
+test('L2 NFR: an 800-page PDF shows its first page in under 2 s and stays light while scrolling', async ({ page }) => {
+  test.setTimeout(120_000);
+  await openApp(page);
+  await importFile(page, 'big.pdf', await makeBookPdf(800), 'application/pdf');
+  await expect(page.getByTestId('pdf-page')).toHaveText('1 / 800');
+  // reopen from the library: the book is parsed again from local storage
+  await page.getByRole('button', { name: /^Close Foundations/ }).click();
+  await openLibrary(page);
+  const t0 = await page.evaluate(() => performance.now());
+  await page.getByRole('button', { name: 'Open Foundations of Study Systems' }).click();
+  await expect(page.locator('.pdfv-page[data-page="1"] canvas.ready')).toBeVisible();
+  const t1 = await page.evaluate(() => performance.now());
+  expect(t1 - t0).toBeLessThan(2000);
+  // jump through the book: only pages near the viewport exist
+  await page.getByRole('button', { name: 'Table of contents' }).click();
+  for (const ch of ['Chapter 8', 'Chapter 16', 'Chapter 2']) {
+    await page.getByRole('navigation', { name: 'Contents' }).getByRole('button', { name: new RegExp(`^${ch}\\b`) }).click();
+    await expect(page.locator('.pdfv-page canvas.ready').first()).toBeVisible();
+    expect(await page.locator('.pdfv-page').count()).toBeLessThan(12);
+  }
+  await expect(page.getByTestId('pdf-page')).toHaveText(/^5\d \/ 800$/);
+});
+
+test('L2 P1: switching side-pane tabs keeps the reading place', async ({ page }) => {
+  await openApp(page);
+  await importFile(page, 'book.pdf', await makeBookPdf(40), 'application/pdf');
+  await expect(page.locator('.pdfv-page[data-page="1"] canvas.ready')).toBeVisible();
+  await page.locator('.pdfv-scroll').evaluate((el) => (el.scrollTop = el.scrollHeight / 2));
+  await expect(page.getByTestId('pdf-page')).toHaveText(/^2\d \/ 40$/);
+  const before = await page.getByTestId('pdf-page').textContent();
+  await openLibrary(page);
+  await page.getByRole('tab', { name: /Foundations of Study Systems/ }).click();
+  await expect(page.getByTestId('pdf-page')).toHaveText(before!);
+  await expect(page.locator('.pdfv-page canvas.ready').first()).toBeVisible();
 });

@@ -5,6 +5,7 @@
  * app's storage. Everything goes over postMessage, checked against the frame's window.
  */
 import { useEffect, useRef, useState } from 'react';
+import { useStylusNoScroll } from '../viewerParts';
 import { LassoOverlay, type LassoResult } from '../../sources/LassoOverlay';
 
 export interface FrameHighlight {
@@ -71,6 +72,8 @@ export function SnapshotFrame(p: Props) {
   const cb = useRef(p);
   cb.current = p;
 
+  const lassoRef = useRef<HTMLDivElement>(null);
+  useStylusNoScroll(lassoRef, p.lasso);
   const send = (m: unknown) => frame.current?.contentWindow?.postMessage(m, '*');
   const toClient = (r: { x: number; y: number; w: number; h: number }) => {
     const b = frame.current!.getBoundingClientRect();
@@ -160,6 +163,7 @@ export function SnapshotFrame(p: Props) {
       />
       {p.lasso && (
         <div
+          ref={lassoRef}
           className="snapshot-lasso"
           onWheel={(e) => send({ type: 'scrollBy', dy: e.deltaY, dx: e.deltaX })}
         >

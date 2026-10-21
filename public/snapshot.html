@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-i9sIgB2zk5WRTj4KCiwyH/OUKMImRlP+JGQ8VKZlAz0=' blob:; style-src 'unsafe-inline' blob:; img-src blob: data:; font-src blob: data:; media-src blob: data:; connect-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-nGjOfgSiB33ARru/DGyb8Qhoscgdlw+iAucCyTvl8jE=' blob:; style-src 'unsafe-inline' blob:; img-src blob: data:; font-src blob: data:; media-src blob: data:; connect-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Snapshot</title>
@@ -292,7 +292,8 @@
       clone.style.width = W + 'px';
       const xml = new XMLSerializer().serializeToString(clone);
       const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="' + x + ' ' + y + ' ' + w + ' ' + h + '"><foreignObject x="0" y="0" width="' + W + '" height="' + H + '">' + xml + '</foreignObject></svg>';
-      const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+      // data:, not blob:: Chromium taints canvases drawn from blob: SVGs with foreignObject
+      const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
       try {
         const img = new Image();
         img.src = url;
@@ -313,7 +314,7 @@
           }
         });
       } finally {
-        URL.revokeObjectURL(url);
+        /* nothing to release */
       }
     } catch (e) {
       return null;

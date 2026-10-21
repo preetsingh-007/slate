@@ -20,7 +20,7 @@ import { uid } from '../../../core/util/ids';
 import { useServices } from '../../../app/services';
 import { toast } from '../../common/toast';
 import type { LassoResult } from '../../sources/LassoOverlay';
-import { useAnnotations, useClipRefs, useLocalPref, useSettingsVersion } from '../hooks';
+import { useAnnotations, useClipRefs, useKeepScroll, useLocalPref, useSettingsVersion } from '../hooks';
 import { useLibraryUi } from '../state';
 import { HighlightMenu, LassoHost, NoteEditor, SelectionMenu, copyText } from '../viewerParts';
 import type { InkMode, InkStyle } from './InkLayer';
@@ -87,9 +87,10 @@ export function PdfViewer({ book, onMissing }: { book: BookMeta; onMissing(): vo
   useLayoutEffect(() => {
     const el = scroll.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
+    // a hidden tab has no width: keep the last layout instead of shrinking every page
+    const ro = new ResizeObserver(() => el.clientWidth > 0 && setWidth(el.clientWidth));
     ro.observe(el);
-    setWidth(el.clientWidth);
+    if (el.clientWidth > 0) setWidth(el.clientWidth);
     return () => ro.disconnect();
   }, []);
 
@@ -210,11 +211,17 @@ export function PdfViewer({ book, onMissing }: { book: BookMeta; onMissing(): vo
     if (offsetsRef.current[n] !== undefined) el.scrollTop = offsetsRef.current[n] + intra * cssHeightFor(n);
   }, [zoom, cssHeightFor]);
 
+  // back from a hidden tab: return to the page and offset that were on screen
+  useKeepScroll(scroll, (el) => {
+    const { n, intra } = posRef.current;
+    if (offsetsRef.current[n] !== undefined) el.scrollTop = offsetsRef.current[n] + intra * cssHeightFor(n);
+  });
+
   const [visibleRange, setVisibleRange] = useState<[number, number]>([1, 3]);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const onScroll = () => {
     const el = scroll.current;
-    if (!el || !pageCount) return;
+    if (!el || !pageCount || el.clientWidth === 0) return;
     const top = el.scrollTop;
     const first = pageAt(top);
     posRef.current = { n: first, intra: Math.max(0, Math.min(1, (top - offsetsRef.current[first]) / cssHeightFor(first))) };

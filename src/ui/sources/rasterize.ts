@@ -86,7 +86,8 @@ export async function rasterizeRegion(container: HTMLElement, rect: DOMRect, sca
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}" viewBox="${ox} ${oy} ${rect.width} ${rect.height}">` +
     `<foreignObject x="0" y="0" width="${width}" height="${height}">${xml}</foreignObject></svg>`;
-  const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+  // a data: URL, not blob:: Chromium taints canvases drawn from blob: SVGs with foreignObject
+  const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   try {
     const img = new Image();
     img.decoding = 'async';
@@ -111,7 +112,5 @@ export async function rasterizeRegion(container: HTMLElement, rect: DOMRect, sca
     return blob ? { blob, w: rect.width, h: rect.height } : null;
   } catch {
     return null;
-  } finally {
-    URL.revokeObjectURL(url);
   }
 }
