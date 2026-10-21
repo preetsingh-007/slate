@@ -4,7 +4,7 @@
  * Order of lines is the checklist order; checked items show in the collapsed Done list.
  */
 import * as Y from 'yjs';
-import { extractTasks } from '../markdown/tasks';
+import { parseChecklist } from './checklist';
 
 export function checklistText(doc: Y.Doc): Y.Text {
   return doc.getText('checklist');
@@ -17,5 +17,6 @@ export interface ChecklistItem {
 }
 
 export function readChecklist(doc: Y.Doc): ChecklistItem[] {
-  return extractTasks(checklistText(doc).toString()).map((t) => ({ index: t.index, text: t.text, checked: t.checked }));
+  // lenient: a merge of concurrent toggles may leave `[xx]` (see checklist.ts)
+  return parseChecklist(checklistText(doc).toString()).map((t) => ({ index: t.index, text: t.text, checked: t.checked }));
 }
