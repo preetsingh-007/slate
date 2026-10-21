@@ -21,17 +21,17 @@ import { LibraryPane } from './LibraryPane';
 import { useLibraryUi } from './state';
 import './library.css';
 
+/** Set by LibraryMount; pane titles are read outside React. */
 let servicesRef: Services | null = null;
-const title = (fn: (s: Services) => string | undefined, fallback: string) => () => (servicesRef ? (fn(servicesRef) ?? fallback) : fallback);
 
 registerPane('library', { component: LibraryPane, title: () => 'Library' });
 registerPane('book', {
   component: BookPane,
-  title: (tab: Extract<PaneTab, { kind: 'book' }>) => title((s) => s.library.book(tab.id)?.title, 'Book')(),
+  title: (tab: Extract<PaneTab, { kind: 'book' }>) => servicesRef?.library.book(tab.id)?.title ?? 'Book',
 });
 registerPane('clipping', {
   component: ClippingPane,
-  title: (tab: Extract<PaneTab, { kind: 'clipping' }>) => title((s) => s.library.clipping(tab.id)?.title, 'Clipping')(),
+  title: (tab: Extract<PaneTab, { kind: 'clipping' }>) => servicesRef?.library.clipping(tab.id)?.title ?? 'Clipping',
 });
 
 function isEditable(t: EventTarget | null): boolean {

@@ -55,3 +55,12 @@ Rendering: strokes and shapes are drawn on canvas tiles (only visible tiles, cac
 ## Sync
 
 Sync pulls on open and on returning to the foreground, and pushes about 20 seconds after the last change and when the app goes to the background. Yjs documents merge; JSON files merge field by field; derived files are regenerated, never merged. Commits touch only `journal/` and `library/`.
+
+## Library
+
+Books (PDF, EPUB) and clippings open in the side pane (`src/ui/library/`); the logic is in `src/core/library/` and `src/core/html/toMarkdown.ts`.
+
+- Book files are stored by SHA-256 in the asset store; a book synced without its file asks for it and matches the re-imported file by hash. Annotations live in `ann:<item id>`; PDF ink is stored in units of the page width.
+- Clippings are read-only after creation. New from link goes through the fetch helper only: Readability gives the Reader view; the snapshot (HTML plus images, stylesheets, their `url()` resources and scripts, stored as `assets/<hash>.<ext>`) gives the Original view.
+- Snapshots render only in `public/snapshot.html`, loaded with `sandbox="allow-scripts"` (never `allow-same-origin`) and fed over `postMessage`. Its own CSP allows no network and only its bootstrap script (by hash) and `blob:` scripts; after editing that script run `node scripts/snapshot-csp.mjs`.
+- Text-quote anchors (highlights, notes, clip source links) are offsets into the text walk of `documentText` (`core/library/snapshot.ts`), which the viewers and the snapshot frame share.

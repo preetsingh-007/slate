@@ -187,6 +187,16 @@ test.describe('New from link', () => {
     expect((await libraryItems(page)).books[0].title).toBe('Lecture Notes on Rank');
   });
 
+  test('L10: offline, New from link says so and offers New from clipboard', async ({ page, context }) => {
+    await openApp(page);
+    await setHelper(page);
+    await context.setOffline(true);
+    const dialog = await newFromLink(page, 'https://blog.example/posts/spaced-repetition');
+    await expect(dialog.getByRole('status')).toContainText('offline');
+    await expect(dialog.getByRole('button', { name: 'New from clipboard' })).toBeVisible();
+    await context.setOffline(false);
+  });
+
   test('L10: failed fetches explain why and offer New from clipboard', async ({ page }) => {
     await openApp(page);
     // helper not configured
