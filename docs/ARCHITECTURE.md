@@ -60,7 +60,7 @@ The engine is [`core/sync/engine.ts`](../src/core/sync/engine.ts) (`services.syn
 | File | On pull | On push |
 | --- | --- | --- |
 | `*.yjs` (segments, `todo.yjs`, annotations) | merged as CRDT updates; segments and annotations only if the device has them | the merged state, when GitHub lacks part of it |
-| `canvas.json`, `book.json`, `meta.json` | three-way merge per field against the last synced version (both changed: this device wins; `topics` as sets; `segments` per month) | written when different |
+| `canvas.json`, `book.json`, `meta.json` | three-way merge per field against the last synced version (both changed: this device wins; never synced here: the repository wins; `topics` as sets; `segments` per month) | written when different |
 | `settings.json` | `mergeSettings`: reading positions and pane state by their own time, the rest newest-wins | written when different |
 | `clipping.md`, `snapshot.html`, assets | downloaded when opened | written once (content is immutable, L11); assets once per content hash |
 | derived (`days/`, `marks/`, `queue.md`, `todos.md`, READMEs, `annotations.md`) | ignored, except queue and to-do lines of segments not on the device | regenerated ([`derived/`](../src/core/sync/derived)) |

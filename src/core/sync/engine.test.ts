@@ -246,6 +246,19 @@ describe('new device (R9, R3)', () => {
     expect(repo.log().length).toBe(commits);
   });
 
+  it('takes the repository\'s canvas title over a new device\'s default canvas', async () => {
+    const { dev } = await setup();
+    const a = await dev('a');
+    await a.canvases.update('main', { title: 'Lectures' });
+    await a.sync.sync();
+    const b = await dev('b');
+    expect(b.canvases.meta('main')?.title).toBe('Main');
+    await b.sync.sync();
+    expect(b.canvases.meta('main')?.title).toBe('Lectures');
+    await a.sync.sync();
+    expect(a.canvases.meta('main')?.title).toBe('Lectures');
+  });
+
   it('carries queue and to-do lines for segments the device has not downloaded', async () => {
     const { repo, dev } = await setup();
     const a = await dev('a');

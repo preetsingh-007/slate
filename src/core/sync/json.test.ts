@@ -32,6 +32,9 @@ describe('JSON files (R2)', () => {
     // only the remote changed the title: the remote wins
     expect(mergeCanvasFile(base, base, { ...base, title: 'Remote' }).title).toBe('Remote');
     expect(canvasMetaFromFile('main', { title: 'X' })).toEqual({ id: 'main', slug: 'main', title: 'X', topics: [], segments: {} });
+    // never synced here (a new device's default canvas): the repository wins, sets still merge
+    const fresh = canvasFile({ id: 'main', slug: 'main', title: 'Main', topics: ['local'], segments: {} });
+    expect(mergeCanvasFile(undefined, fresh, { ...base, title: 'Lectures' })).toMatchObject({ title: 'Lectures', topics: ['local', 'a'], segments: base.segments });
   });
 
   it('book.json and meta.json merge field by field; both changed: this device wins', () => {

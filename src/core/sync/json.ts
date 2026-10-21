@@ -3,7 +3,7 @@
  *
  * | File | Merge rule |
  * | --- | --- |
- * | `journal/<canvas>/canvas.json` | Three-way, field by field, against the version last synced. A field changed on one side takes that side; changed on both: `topics` merge as sets (additions and removals from both sides), `segments` merge per month (union of bounds), any other field takes this device's value. |
+ * | `journal/<canvas>/canvas.json` | Three-way, field by field, against the version last synced. A field changed on one side takes that side; changed on both: `topics` merge as sets (additions and removals from both sides), `segments` merge per month (union of bounds), any other field takes this device's value. Never synced on this device (no base): the repository's value. |
  * | `library/books/<slug>/book.json` | Same three-way field merge (`topics` as sets). A book folder removed on GitHub removes the book here. |
  * | `library/clippings/<slug>/meta.json` | Same three-way field merge. Clipping content (`clipping.md`, `snapshot.html`, `assets/`) never changes after creation (L11), so it is written once and never merged. |
  * | `library/settings.json` | `mergeSettings` (core/stores/settings.ts): each reading position and the pane state newest-wins by their own `updated`; everything else from the side with the newer `updated`. |
@@ -64,12 +64,15 @@ export function mergeSet3(base: readonly string[] | undefined, local: readonly s
   return out;
 }
 
+/** Merges one field changed on both sides; undefined falls back to the default rule. */
 export type FieldResolver = (key: string, base: unknown, local: unknown, remote: unknown) => unknown;
 
 /**
  * Field-by-field three-way merge of two versions of a JSON object against their common base
  * (the version last synced; undefined when there is none). Changed on one side → that side;
- * changed on both → `resolve` (default: this device's value).
+ * changed on both → `resolve`, else this device's value. Without a base (this device never
+ * synced the file, e.g. the default canvas of a new device) the repository's value wins, as
+ * the repository is the source of truth.
  */
 export function merge3<T extends object>(base: T | undefined, local: T, remote: T, resolve?: FieldResolver): T {
   const out: Record<string, unknown> = {};
@@ -83,7 +86,10 @@ export function merge3<T extends object>(base: T | undefined, local: T, remote: 
     if (deepEqual(lv, rv)) v = lv;
     else if (base && deepEqual(lv, b[k])) v = rv;
     else if (base && deepEqual(rv, b[k])) v = lv;
-    else v = resolve ? resolve(k, b[k], lv, rv) : lv;
+    else {
+      const custom = resolve?.(k, b[k], lv, rv);
+      v = custom !== undefined ? custom : base ? lv : rv;
+    }
     if (v !== undefined) out[k] = v;
   }
   return out as T;
@@ -91,7 +97,7 @@ export function merge3<T extends object>(base: T | undefined, local: T, remote: 
 
 const topicsResolver: FieldResolver = (key, base, local, remote) => {
   if (key === 'topics' && Array.isArray(local) && Array.isArray(remote)) return mergeSet3(base as string[] | undefined, local as string[], remote as string[]);
-  return local;
+  return undefined;
 };
 
 // ---------------------------------------------------------------- canvas.json
