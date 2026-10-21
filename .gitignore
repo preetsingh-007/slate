@@ -1,0 +1,12 @@
+node_modules
+dist
+dev-dist
+coverage
+test-results
+playwright-report
+*.log
+.DS_Store
+.vite
+public/pdfjs
+.wrangler
+worker/.dev.vars

@@ -1,0 +1,11 @@
+# Cloudflare Worker: Slate fetch helper (free tier).
+# Deploy: see worker/README.md.
+name = "slate-fetch"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[vars]
+# Origins allowed to call the helper (comma-separated). The GitHub Pages origin of the app.
+ALLOWED_ORIGINS = "https://preetsingh-007.github.io"
+
+# The shared secret is set with: npx wrangler secret put SLATE_KEY
