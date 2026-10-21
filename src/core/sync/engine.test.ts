@@ -451,6 +451,23 @@ describe('assets and library (R7, R11)', () => {
     for (const d of [a, b]) expect(d.canvases.meta('main')).toMatchObject({ title: 'Lectures', topics: ['math/linear-algebra/eigenvalues'] });
   });
 
+  it('keeps both clippings when two devices pick the same folder name (R2)', async () => {
+    const { repo, dev } = await setup();
+    const a = await dev('a');
+    const b = await dev('b');
+    const meta = (id: string, title: string): ClippingMeta => ({ id, slug: '2026-10-21-notes', origin: 'clipboard', title, format: 'plain', added: T(21), contentHash: id });
+    await a.library.putClipping(meta('ca', 'From A'), { markdown: 'A', assets: [] });
+    await b.library.putClipping(meta('cb', 'From B'), { markdown: 'B', assets: [] });
+    await a.sync.sync();
+    await b.sync.sync();
+    await a.sync.sync();
+    const files = repo.files();
+    expect(JSON.parse(text(files.get('library/clippings/2026-10-21-notes/meta.json'))!).id).toBe('ca');
+    expect(JSON.parse(text(files.get('library/clippings/2026-10-21-notes-2/meta.json'))!).id).toBe('cb');
+    expect(text(files.get('library/clippings/2026-10-21-notes-2/clipping.md'))).toContain('\nB\n');
+    for (const d of [a, b]) expect(d.library.clippings().map((c) => c.slug).sort()).toEqual(['2026-10-21-notes', '2026-10-21-notes-2']);
+  });
+
   it('Git LFS mode uploads book files and commits pointers (against an LFS server that allows it)', async () => {
     const { repo, dev } = await setup();
     const a = await dev('a');

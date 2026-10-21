@@ -74,6 +74,13 @@ async function fetchJson<T>(ctx: SyncContext, sha: string): Promise<T | null> {
   return parseJsonBytes<T>(await ctx.remote.getBlob(sha));
 }
 
+/** Downloads the given JSON files in parallel (a new device has the whole index to fetch, R9). */
+async function prefetchJson(ctx: SyncContext, entries: [string, string][]): Promise<Map<string, unknown>> {
+  const out = new Map<string, unknown>();
+  await mapLimit(entries, 6, async ([path, sha]) => void out.set(path, await fetchJson(ctx, sha)));
+  return out;
+}
+
 /** A free folder name for an item whose name another device took first (`<slug>-2`, …). */
 function freeSlug(slug: string, taken: (s: string) => boolean): string {
   for (let n = 2; ; n++) {
@@ -86,13 +93,17 @@ async function pullLibrary(ctx: SyncContext, tree: Record<string, string>) {
   const { st, deps } = ctx;
   const { library } = deps;
   const tombs = new Set(library.tombstones().map((t) => t.id));
-  for (const [path, sha] of Object.entries(tree)) {
+  const isItem = (path: string) => {
     const f = parseRepoPath(path);
-    const isBook = f?.kind === 'book' && f.file === 'book.json' && NAME.test(f.slug);
-    const isClipping = f?.kind === 'clipping' && f.file === 'meta.json' && CLIPPING_DIR.test(f.slug);
-    if (!f || !(isBook || isClipping) || st.merged[path] === sha) continue;
-    const slug = (f as { slug: string }).slug;
-    const parsed = await fetchJson<{ id?: unknown } & Record<string, unknown>>(ctx, sha);
+    return (f?.kind === 'book' && f.file === 'book.json' && NAME.test(f.slug)) || (f?.kind === 'clipping' && f.file === 'meta.json' && CLIPPING_DIR.test(f.slug));
+  };
+  const files = await prefetchJson(ctx, Object.entries(tree).filter(([path, sha]) => isItem(path) && st.merged[path] !== sha));
+  for (const [path, sha] of Object.entries(tree)) {
+    if (!files.has(path)) continue;
+    const f = parseRepoPath(path) as { kind: 'book' | 'clipping'; slug: string };
+    const isBook = f.kind === 'book';
+    const slug = f.slug;
+    const parsed = files.get(path) as ({ id?: unknown } & Record<string, unknown>) | null;
     if (!parsed || typeof parsed.id !== 'string') {
       st.merged[path] = sha;
       continue;
@@ -135,10 +146,17 @@ async function pullCanvases(ctx: SyncContext, tree: Record<string, string>) {
   const { st, deps } = ctx;
   const metas = [...deps.canvases.list()];
   let changed = false;
+  const files = await prefetchJson(
+    ctx,
+    Object.entries(tree).filter(([path, sha]) => {
+      const f = parseRepoPath(path);
+      return f?.kind === 'canvasJson' && NAME.test(f.slug) && st.merged[path] !== sha;
+    }),
+  );
   for (const [path, sha] of Object.entries(tree)) {
     const f = parseRepoPath(path);
-    if (f?.kind !== 'canvasJson' || !NAME.test(f.slug) || st.merged[path] === sha) continue;
-    const parsed = await fetchJson<Partial<CanvasFile>>(ctx, sha);
+    if (f?.kind !== 'canvasJson' || !files.has(path)) continue;
+    const parsed = files.get(path) as Partial<CanvasFile> | null;
     st.merged[path] = sha;
     if (!parsed) continue;
     const remote = canvasFile(canvasMetaFromFile(f.slug, parsed));

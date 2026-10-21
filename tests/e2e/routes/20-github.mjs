@@ -5,9 +5,14 @@
 //   POST /github/__config  { repo, tokens?, tokenExpiry?, networkDown? }
 //   GET  /github/__files?repo=owner/name   → { path: text } of the default branch
 //   GET  /github/__log?repo=owner/name     → commit messages, newest first
-import { FakeGitHub } from '../../../src/core/sync/git/fakeGitHub.ts';
-
-const gh = new FakeGitHub({ prefix: '/github' });
+// Loading a .ts module needs Node's type stripping (on by default from Node 22.18; CI uses 22).
+let gh;
+try {
+  const { FakeGitHub } = await import('../../../src/core/sync/git/fakeGitHub.ts');
+  gh = new FakeGitHub({ prefix: '/github' });
+} catch (err) {
+  console.error(`[e2e server] mocked GitHub unavailable (needs Node >= 22.18 or --experimental-strip-types): ${err?.message ?? err}`);
+}
 
 async function body(req) {
   const chunks = [];
@@ -22,6 +27,7 @@ function json(res, status, data) {
 
 export async function handle(req, res, url) {
   if (!url.pathname.startsWith('/github/')) return false;
+  if (!gh) return json(res, 500, { message: 'mocked GitHub unavailable: run the e2e server on Node >= 22.18' }), true;
   const p = url.pathname;
   if (p === '/github/__setup' && req.method === 'POST') {
     const b = JSON.parse(new TextDecoder().decode(await body(req)));
