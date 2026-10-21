@@ -209,7 +209,7 @@ export class SyncEngine {
    * to it (the repository's `permissions`), and the branch exists.
    */
   async verify(input: ConnectInput): Promise<VerifyResult> {
-    if (!parseRepo(input.repo)) return { ok: false, error: 'Enter the repository as owner/name, for example sagal/gym.' };
+    if (!parseRepo(input.repo)) return { ok: false, error: 'Enter the repository as owner/name, for example octocat/gym.' };
     if (!input.token.trim()) return { ok: false, error: 'Enter the token.' };
     let expiry: number | undefined;
     const remote = new GitHubRemote({ token: input.token.trim(), repo: input.repo, branch: input.branch || 'main', baseUrl: this.apiBase(), fetch: this.deps.fetch, onTokenExpiry: (t) => (expiry = t) });
