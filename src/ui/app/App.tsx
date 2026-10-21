@@ -3,6 +3,8 @@ import { PanelRight, Layers } from 'lucide-react';
 import { useApp } from './store';
 import { Workspace } from './Workspace';
 import { CanvasPane } from '../canvas/CanvasPane';
+import { CanvasSwitcher } from '../canvas/CanvasSwitcher';
+import { CarryTray } from '../canvas/CarryTray';
 import { ToastHost, useNarrow } from '../common/toast';
 import { GymTopbarButtons } from '../gym/register';
 import { SettingsButton, SyncStatusButton } from '../sync/SyncStatusButton';
@@ -23,6 +25,7 @@ export function App() {
     <div className="app">
       <header className="topbar" role="toolbar" aria-label="App">
         <span className="title">Slate</span>
+        <CanvasSwitcher />
         <span className="spacer" />
         <GymTopbarButtons />
         <SyncStatusButton />
@@ -45,6 +48,7 @@ export function App() {
       </header>
       <Workspace canvas={<CanvasPane slug={canvas} />} />
       <SyncMount />
+      <CarryTray />
       <ToastHost />
     </div>
   );

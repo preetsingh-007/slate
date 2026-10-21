@@ -4,6 +4,7 @@
  * Markdown source), so the SVG renders anywhere, including GitHub.
  */
 import type { CanvasObject, ShapeGeometry, Rect } from '../model/types';
+import { geometryToSvg } from '../ink/shapes';
 import { strokeToSvgPath, HIGHLIGHTER_ALPHA, CURRENT_INK } from '../ink/render';
 import { escapeXml, safeColor } from '../ink/svgsafe';
 import { compareZ } from '../util/zindex';
@@ -96,34 +97,7 @@ function objectSvg(o: CanvasObject, ink: string, opts: SvgOptions): string {
   }
 }
 
-/** SVG for a shape geometry; colours use currentColor. */
+/** SVG for a shape geometry; colours use currentColor (Axiom's generator, see core/ink/shapes). */
 export function shapeSvg(g: ShapeGeometry, sw: number): string {
-  const stroke = `fill="none" stroke="currentColor" stroke-width="${f(sw)}" stroke-linecap="round" stroke-linejoin="round"`;
-  switch (g.kind) {
-    case 'line':
-      return `<path d="M${f(g.a.x)} ${f(g.a.y)}L${f(g.b.x)} ${f(g.b.y)}" ${stroke}/>`;
-    case 'arrow': {
-      const head = (from: { x: number; y: number }, tip: { x: number; y: number }) => {
-        const len = Math.hypot(tip.x - from.x, tip.y - from.y) || 1;
-        const size = Math.min(Math.max(12, 9 + sw * 2.2), len * 0.35);
-        const ux = (tip.x - from.x) / len;
-        const uy = (tip.y - from.y) / len;
-        const bx = tip.x - ux * size;
-        const by = tip.y - uy * size;
-        const h = size * 0.42;
-        return `<path d="M${f(tip.x)} ${f(tip.y)}L${f(bx - uy * h)} ${f(by + ux * h)}L${f(bx + uy * h)} ${f(by - ux * h)}Z" fill="currentColor"/>`;
-      };
-      return `<path d="M${f(g.a.x)} ${f(g.a.y)}L${f(g.b.x)} ${f(g.b.y)}" ${stroke}/>${head(g.a, g.b)}${g.heads === 'both' ? head(g.b, g.a) : ''}`;
-    }
-    case 'circle':
-      return `<circle cx="${f(g.cx)}" cy="${f(g.cy)}" r="${f(g.r)}" ${stroke}/>`;
-    case 'ellipse':
-      return `<ellipse cx="${f(g.cx)}" cy="${f(g.cy)}" rx="${f(g.rx)}" ry="${f(g.ry)}"${g.rotation ? ` transform="rotate(${f(g.rotation)} ${f(g.cx)} ${f(g.cy)})"` : ''} ${stroke}/>`;
-    case 'rectangle':
-      return `<rect x="${f(g.cx - g.w / 2)}" y="${f(g.cy - g.h / 2)}" width="${f(g.w)}" height="${f(g.h)}"${g.rotation ? ` transform="rotate(${f(g.rotation)} ${f(g.cx)} ${f(g.cy)})"` : ''} ${stroke}/>`;
-    case 'triangle':
-      return `<path d="M${g.points.map((p) => `${f(p.x)} ${f(p.y)}`).join('L')}Z" ${stroke}/>`;
-    case 'diamond':
-      return `<path d="M${f(g.cx)} ${f(g.cy - g.h / 2)}L${f(g.cx + g.w / 2)} ${f(g.cy)}L${f(g.cx)} ${f(g.cy + g.h / 2)}L${f(g.cx - g.w / 2)} ${f(g.cy)}Z" ${stroke}/>`;
-  }
+  return geometryToSvg(g, sw);
 }
