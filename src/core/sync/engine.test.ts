@@ -304,6 +304,14 @@ describe('authentication (R4)', () => {
     expect(a.sync.getStatus().phase).toBe('synced');
   });
 
+  it('shows syncing until the first run after start, then synced', async () => {
+    const { dev } = await setup();
+    const a = await dev('a');
+    expect(a.sync.getStatus().phase).toBe('syncing');
+    await a.sync.sync();
+    expect(a.sync.getStatus().phase).toBe('synced');
+  });
+
   it('warns 14 days before the token expires', async () => {
     const { dev } = await setup();
     const a = await dev('a', { now: () => Date.UTC(2026, 9, 21) });
@@ -496,6 +504,61 @@ describe('status (R10)', () => {
     for (let i = 0; i < 100 && repo.log().length === base; i++) await wait(10);
     expect(repo.log()[0]).toBe('journal: Update main canvas, 2026-10');
     a.sync.stop();
+  });
+});
+
+describe('foreground and background (R4)', () => {
+  const setVisibility = (state: 'visible' | 'hidden') => {
+    Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  };
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it('pushes when the app goes to the background and pulls when it returns', async () => {
+    const { repo, dev } = await setup();
+    const a = await dev('a', { timings: { pushDelayMs: 60_000, pullIntervalMs: 60_000, initialDelayMs: 0 } });
+    const b = await dev('b');
+    a.sync.start();
+    for (let i = 0; i < 200 && repo.log().length < 3; i++) await wait(10);
+    const base = repo.log().length;
+    await a.draw([stroke('bg', T(21))]);
+    setVisibility('hidden');
+    for (let i = 0; i < 200 && repo.log().length === base; i++) await wait(10);
+    expect(repo.log()[0]).toBe('journal: Update main canvas, 2026-10');
+
+    // another device pushes while this one is in the background; returning pulls it
+    await b.sync.sync();
+    await b.library.putClipping({ id: 'c9', slug: '2026-10-21-fg', origin: 'clipboard', title: 'Foreground', format: 'plain', added: 1, contentHash: 'h' }, { markdown: 'x', assets: [] });
+    await b.sync.sync();
+    setVisibility('visible');
+    for (let i = 0; i < 200 && !a.library.clipping('c9'); i++) await wait(10);
+    expect(a.library.clipping('c9')?.title).toBe('Foreground');
+    a.sync.stop();
+  });
+});
+
+describe('annotations (R2, R9)', () => {
+  it('merges annotations of the same book from two devices; the second downloads them when opened', async () => {
+    const { repo, dev } = await setup();
+    const book: BookMeta = { id: 'b1', slug: 'sicp', format: 'pdf', title: 'SICP', authors: [], citation: '', fileHash: 'f'.repeat(64), fileName: 'sicp.pdf', size: 1, added: 1 };
+    const hl = (id: string, page: number) => ({ id, kind: 'highlight', locator: { type: 'pdf', page, region: { x: 0, y: 0, w: 1, h: 0.1 }, quote: '' }, color: '#ff0', text: id, created: page });
+    const a = await dev('a');
+    await a.library.putBook(book);
+    (await a.docs.open(annotationsDocId('b1'))).getMap('annotations').set('a1', hl('a1', 1));
+    await a.sync.sync();
+    const b = await dev('b');
+    await b.sync.sync();
+    expect(await b.docs.listDocIds()).not.toContain(annotationsDocId('b1'));
+    await b.sync.ensureDoc(annotationsDocId('b1')); // the library area calls this before opening the book
+    const annB = (await b.docs.open(annotationsDocId('b1'))).getMap('annotations');
+    expect([...annB.keys()]).toEqual(['a1']);
+    annB.set('b1', hl('b1', 2));
+    (await a.docs.open(annotationsDocId('b1'))).getMap('annotations').set('a2', hl('a2', 3));
+    await b.sync.sync();
+    await a.sync.sync();
+    await b.sync.sync();
+    for (const d of [a, b]) expect([...(await d.docs.open(annotationsDocId('b1'))).getMap('annotations').keys()].sort()).toEqual(['a1', 'a2', 'b1']);
+    expect(text(repo.files().get('library/books/sicp/annotations.md'))).toContain('## Page 3');
   });
 });
 

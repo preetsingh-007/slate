@@ -195,7 +195,8 @@ export class SyncEngine {
     this.remote = next ? this.makeRemote(next) : null;
     this.deps.mirror?.setFetcher(this.remote ? (sha) => this.remote!.getBlob(sha) : null);
     this.status.reason = undefined;
-    this.refreshStatus(next ? 'synced' : 'off');
+    // until the first run finishes, a configured engine is about to sync
+    this.refreshStatus(next ? 'syncing' : 'off');
     if (next && this.bg) void this.sync();
   }
 
@@ -461,7 +462,11 @@ export class SyncEngine {
     });
     listen(win, 'online', () => void this.sync());
     listen(win, 'offline', () => this.refreshStatus('offline', 'Offline. Changes are saved on this device and sync when you are back online.'));
+    let ticks = 0;
     const interval = setInterval(() => {
+      // documents edited in another tab of this browser never reach this tab's change tracking;
+      // a full scan every few minutes picks them up (only the tab holding the lock syncs)
+      if (++ticks % 6 === 0) this.fullScan = true;
       this.refreshStatus();
       if (!doc || doc.visibilityState === 'visible') void this.sync();
     }, this.timings.pullIntervalMs);

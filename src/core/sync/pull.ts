@@ -13,7 +13,7 @@ import { DEFAULT_SETTINGS, mergeSettings } from '../stores/settings';
 import { TODO_DOC_ID, parseSegmentDocId, segmentDocId } from '../stores/docIds';
 import { GIT_TRANSPORT, type SyncContext } from './context';
 import { readSegment, segmentAssets } from './derived/segment';
-import { mapLimit } from './git/remote';
+import { AuthError, mapLimit } from './git/remote';
 import { canvasFile, canvasMetaFromFile, deepEqual, mergeCanvasFile, mergeItemFile, parseJsonBytes, type CanvasFile } from './json';
 import { docForPath, withDoc } from './local';
 import { CLIPPING_DIR, FORMALIZED_PATH, NAME, SETTINGS_PATH, parseRepoPath, segmentAssetPath, segmentPath } from './paths';
@@ -58,7 +58,15 @@ export async function pull(ctx: SyncContext, branch: string): Promise<PullResult
     await ctx.save();
     await deps.docs.flush();
   }
-  if (deps.mirror) await deps.mirror.refresh(head.commitSha, entries, (sha) => remote.getBlob(sha));
+  if (deps.mirror) {
+    try {
+      await deps.mirror.refresh(head.commitSha, entries, (sha) => remote.getBlob(sha));
+    } catch (err) {
+      // the journal and library are in sync; only the offline copy of gym's notes lags behind
+      if (err instanceof AuthError) throw err;
+      ctx.warn(`Could not update the offline copy of gym's files: ${String((err as Error)?.message ?? err)}`);
+    }
+  }
   return { changed: true, head: head.commitSha, docsMerged };
 }
 

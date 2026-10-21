@@ -32,7 +32,7 @@ function summarize(parts: string[]): string {
   const uniq = [...new Set(parts)];
   for (let n = uniq.length; n >= 1; n--) {
     const more = uniq.length - n;
-    const s = uniq.slice(0, n).join('; ') + (more ? `; and ${more} more change${more === 1 ? '' : 's'}` : '');
+    const s = uniq.slice(0, n).join('; ') + (more ? ` (+${more} more)` : '');
     if (s.length <= MAX_SUMMARY || n === 1) return s.length <= MAX_SUMMARY ? s : s.slice(0, MAX_SUMMARY - 1) + '…';
   }
   return 'Update';
