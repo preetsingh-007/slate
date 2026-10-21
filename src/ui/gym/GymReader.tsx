@@ -17,6 +17,7 @@ import { CapturePreview } from './CapturePreview';
 import { GymDocument, StatusChip, type DocApi } from './GymDocument';
 import { clearReveal, openGym, openPane, useGymReveal } from './open';
 import { useAsync, useGym } from './useGym';
+import { useKeepScroll } from '../common/useKeepScroll';
 
 type GymTab = Extract<PaneTab, { kind: 'gym' }>;
 
@@ -45,6 +46,8 @@ export function GymPane({ tab, active }: PaneProps<GymTab>) {
   const req = useGymReveal((s) => s.req);
   const docPath = isFile ? path : isDir && idx.isFile(joinPath(path, 'README.md')) ? joinPath(path, 'README.md') : null;
   const lassoable = !!docPath && isMarkdown(docPath);
+  // a hidden tab loses its scroll position (display: none); put it back when shown (P1)
+  useKeepScroll(scrollRef, undefined, path);
 
   // a source link to a file that is not in the mirror (deleted in gym, or not synced yet)
   useEffect(() => {

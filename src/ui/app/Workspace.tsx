@@ -107,8 +107,8 @@ function SidePane({ tabs, active, paneOnly, narrow }: { tabs: ReturnType<typeof 
         )}
         <button
           className="icon-btn"
-          aria-label={paneOnly ? 'Exit full screen' : 'Full screen'}
-          title={paneOnly ? 'Exit full screen' : 'Full screen'}
+          aria-label={paneOnly ? 'Exit full screen side pane' : 'Full screen side pane'}
+          title={paneOnly ? 'Exit full screen side pane' : 'Full screen side pane'}
           onClick={() => app.setLayout(paneOnly ? (narrow ? 'canvas' : 'split') : 'pane')}
         >
           {paneOnly ? <Minimize2 size={16} /> : <Maximize2 size={16} />}

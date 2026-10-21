@@ -8,11 +8,14 @@ import { useApp } from '../app/store';
 import { canvasApi } from '../common/registries';
 import { toast } from '../common/toast';
 
-/** True when the main canvas is visible next to (or instead of) the side pane. */
+/**
+ * True when the main canvas is on screen: next to the side pane, full screen, or (on a narrow
+ * screen, P2) switched to. Only a side pane shown full screen hides it.
+ */
 export function canvasVisible(): boolean {
   const s = useApp.getState();
-  if (s.layout === 'pane') return false;
-  return typeof matchMedia === 'undefined' || !matchMedia('(max-width: 700px)').matches || !s.paneOpen;
+  const paneShown = s.paneOpen && s.tabs.length > 0;
+  return !(paneShown && s.layout === 'pane');
 }
 
 export async function sendToCanvas(captures: Capture[]): Promise<void> {

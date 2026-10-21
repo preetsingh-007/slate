@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { PanelRight, Layers } from 'lucide-react';
+import { PanelRight, Layers, Maximize2, Minimize2 } from 'lucide-react';
 import { useApp } from './store';
 import { Workspace } from './Workspace';
 import { CanvasPane } from '../canvas/CanvasPane';
@@ -41,8 +41,25 @@ export function App() {
             <Layers size={18} />
           </button>
         )}
+        {!narrow && hasTabs && paneOpen && (
+          // P1: either pane can go full screen; the side pane has its own control in its tab bar
+          <button
+            className="icon-btn"
+            aria-label={layout === 'canvas' ? 'Exit full screen canvas' : 'Full screen canvas'}
+            title={layout === 'canvas' ? 'Exit full screen canvas' : 'Full screen canvas'}
+            aria-pressed={layout === 'canvas'}
+            onClick={() => useApp.getState().setLayout(layout === 'canvas' ? 'split' : 'canvas')}
+          >
+            {layout === 'canvas' ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+          </button>
+        )}
         {!narrow && (
-          <button className="icon-btn" aria-label="Toggle side pane" aria-pressed={paneOpen} title="Toggle side pane" onClick={() => useApp.getState().togglePane()}>
+          <button className="icon-btn" aria-label="Toggle side pane" aria-pressed={paneOpen && hasTabs && layout !== 'canvas'} title="Toggle side pane" onClick={() => {
+              const app = useApp.getState();
+              // an empty side pane has nothing to show: open the library in it
+              if (!hasTabs) app.openTab({ kind: 'library' });
+              else app.togglePane(!(paneOpen && layout !== 'canvas'));
+            }}>
             <PanelRight size={18} />
           </button>
         )}

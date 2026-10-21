@@ -1,6 +1,7 @@
 /**
  * App-level UI state: the open canvas, the side pane and its tabs (P1–P3), and the carry
- * tray (S4). Persisted locally; the pane state is also synced through settings (P3).
+ * tray (S4). Persisted locally; the pane state is also synced through settings (P3, see
+ * layoutSync.ts).
  */
 import { create } from 'zustand';
 import type { Capture } from '../../core/model/capture';
@@ -34,6 +35,13 @@ export interface AppState {
 
 export const MAX_TABS = 8;
 
+/** P2: iPhone and iPad Slide Over show one pane at a time. */
+export const NARROW_QUERY = '(max-width: 700px)';
+
+export function isNarrowScreen(): boolean {
+  return typeof matchMedia !== 'undefined' && matchMedia(NARROW_QUERY).matches;
+}
+
 export function sameTab(a: PaneTab, b: PaneTab): boolean {
   if (a.kind !== b.kind) return false;
   switch (a.kind) {
@@ -62,7 +70,8 @@ export const useApp = create<AppState>((set) => ({
   openTab: (tab) =>
     set((s) => {
       const rest = s.tabs.filter((t) => !sameTab(t, tab));
-      return { tabs: [tab, ...rest].slice(0, MAX_TABS), active: 0, paneOpen: true, layout: s.layout === 'canvas' ? 'split' : s.layout };
+      // P2: on a narrow screen opening an item switches to it
+      return { tabs: [tab, ...rest].slice(0, MAX_TABS), active: 0, paneOpen: true, layout: isNarrowScreen() ? 'pane' : s.layout === 'canvas' ? 'split' : s.layout };
     }),
   closeTab: (index) =>
     set((s) => {

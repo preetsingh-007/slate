@@ -324,6 +324,10 @@ export interface PaneState {
   active: number;
   divider: number;
   swapped: boolean;
+  /** whether the side pane is open (absent: open when there are tabs) */
+  open?: boolean;
+  /** slug of the canvas in the main pane */
+  canvas?: string;
   updated: Ms;
   device: string;
 }

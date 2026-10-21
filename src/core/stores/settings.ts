@@ -72,9 +72,13 @@ export class SettingsStore {
     return this.synced;
   }
 
-  /** Local change: bumps `updated` so it wins the next merge. */
-  async update(patch: Partial<SyncedSettings>): Promise<void> {
-    this.synced = { ...this.synced, ...patch, updated: Date.now() };
+  /**
+   * Local change: bumps `updated` so it wins the next merge. Reading positions and pane state
+   * carry their own times and merge by them (`mergeSettings`); they pass `touch: false` so that
+   * scrolling a book here does not make this device's older pens win over another device's.
+   */
+  async update(patch: Partial<SyncedSettings>, opts: { touch?: boolean } = {}): Promise<void> {
+    this.synced = { ...this.synced, ...patch, updated: opts.touch === false ? this.synced.updated : Date.now() };
     await this.db.set('settings', this.synced);
     this.onChange.emit();
   }

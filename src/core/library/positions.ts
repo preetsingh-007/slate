@@ -1,6 +1,8 @@
 /**
  * Reading positions (L2, L3), remembered per book or clipping and synced through
  * `settings.readingPositions` (library/settings.json). The newer position wins a merge.
+ * Other side-pane tabs keep their place here too (P3), under prefixed ids: `gym:<path>` for
+ * the gym reader and `canvas:<slug>` for a canvas in the side pane.
  */
 import type { Locator, ReadingPosition } from '../model/types';
 import type { SettingsStore } from '../stores/settings';
@@ -15,7 +17,7 @@ export function readingPosition(settings: SettingsStore, sourceId: string): Read
 export async function saveReadingPosition(settings: SettingsStore, sourceId: string, locator: PositionLocator, device: string, now = Date.now()): Promise<void> {
   const cur = settings.get().readingPositions ?? {};
   if (cur[sourceId] && JSON.stringify(cur[sourceId].locator) === JSON.stringify(locator)) return;
-  await settings.update({ readingPositions: { ...cur, [sourceId]: { sourceId, locator, updated: now, device } } });
+  await settings.update({ readingPositions: { ...cur, [sourceId]: { sourceId, locator, updated: now, device } } }, { touch: false });
 }
 
 /** Removes the position of a deleted item. */
@@ -24,8 +26,14 @@ export async function forgetReadingPosition(settings: SettingsStore, sourceId: s
   if (!cur[sourceId]) return;
   const next = { ...cur };
   delete next[sourceId];
-  await settings.update({ readingPositions: next });
+  await settings.update({ readingPositions: next }, { touch: false });
 }
+
+/** Reading-position id of a gym file in the gym reader (P3). */
+export const gymPositionId = (path: string) => `gym:${path}`;
+
+/** Reading-position id of a canvas shown in the side pane (P3): its view, as a canvas locator. */
+export const canvasPositionId = (slug: string) => `canvas:${slug}`;
 
 /** PDF position: page plus the fraction of the page scrolled past. */
 export function pdfPosition(page: number, intra: number): Locator {

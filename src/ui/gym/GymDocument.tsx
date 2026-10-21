@@ -15,6 +15,8 @@ import { annotate, loadImages, renderGymDoc, renderPlain } from './docRender';
 import { clearReveal, openGym, useGymReveal } from './open';
 import { captureRegion, flashRects, rangeRects } from './regionCapture';
 import { useAsync, useGym } from './useGym';
+import { useServices } from '../../app/services';
+import { gymPositionId, readingPosition, saveReadingPosition } from '../../core/library/positions';
 
 export interface DocApi {
   capture(lasso: LassoResult): Promise<Capture | null>;
@@ -90,6 +92,40 @@ export function GymDocument({
       if (api.current) api.current = null;
     };
   }, [api, doc, text, path, title, idx]);
+
+  // P3: the place in a file is kept (and synced) like a book's, and restored when it is shown
+  // again; a heading or a source link being opened wins. Declared before the effects that
+  // consume those requests.
+  const services = useServices();
+  const restoredFor = useRef<string | null>(null);
+  useEffect(() => {
+    const a = articleRef.current;
+    const scroller = a?.closest<HTMLElement>('.gym-scroll');
+    if (!ready || !active || !a || !scroller || restoredFor.current === path) return;
+    restoredFor.current = path;
+    if (anchor || useGymReveal.getState().req?.path === path) return;
+    const pos = readingPosition(services.settings, gymPositionId(path))?.locator;
+    if (pos?.type === 'scroll') scroller.scrollTop = pos.fraction * (scroller.scrollHeight - scroller.clientHeight);
+  }, [ready, active, path, anchor, services]);
+  useEffect(() => {
+    const scroller = articleRef.current?.closest<HTMLElement>('.gym-scroll');
+    if (!scroller || !ready) return;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const onScroll = () => {
+      if (scroller.clientWidth === 0) return; // a hidden tab resets its scroll: not a position
+      clearTimeout(t);
+      t = setTimeout(() => {
+        const max = scroller.scrollHeight - scroller.clientHeight;
+        const fraction = max > 0 ? Math.round((scroller.scrollTop / max) * 1000) / 1000 : 0;
+        void saveReadingPosition(services.settings, gymPositionId(path), { type: 'scroll', fraction }, services.device);
+      }, 800);
+    };
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener('scroll', onScroll);
+      clearTimeout(t);
+    };
+  }, [ready, path, services]);
 
   // `path#heading` (G6 badges, links): scroll to the heading
   useEffect(() => {
