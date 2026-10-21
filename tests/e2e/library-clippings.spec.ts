@@ -248,6 +248,7 @@ test.describe('annotations and lasso on clippings', () => {
     const p = (await page.locator('.clip-article p').first().boundingBox())!;
     await lassoRect(page, { x: p.x - 8, y: p.y - 4, width: p.width + 16, height: p.height + 8 });
     await page.getByTestId('capture-preview').getByRole('button', { name: 'Send to canvas' }).click();
+    await expect.poll(async () => (await carry(page)).length).toBeGreaterThan(0);
     const c = await carry(page);
     expect(c[0].text).toBe('Every real symmetric matrix is orthogonally diagonalizable.');
     expect(c[0].source).toMatchObject({ type: 'clipping', id, locator: { type: 'clipping', view: 'reader', quote: { exact: 'Every real symmetric matrix is orthogonally diagonalizable.' } } });
@@ -269,6 +270,7 @@ test.describe('annotations and lasso on clippings', () => {
     await lassoRect(page, { x: h2.x - 6, y: h2.y - 4, width: Math.max(h2.width, ul.width) + 12, height: ul.y + ul.height - h2.y + 8 });
     await expect(page.getByTestId('capture-preview')).toBeVisible({ timeout: 15_000 });
     await page.getByTestId('capture-preview').getByRole('button', { name: 'Send to canvas' }).click();
+    await expect.poll(async () => (await carry(page)).length).toBeGreaterThan(0);
     const c = await carry(page);
     expect(c[0].text).toContain('## How to use it');
     expect(c[0].text).toContain('- Write one fact per card.');

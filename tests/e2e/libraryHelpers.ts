@@ -78,10 +78,20 @@ export async function lassoRect(page: Page, box: { x: number; y: number; width: 
 }
 
 /** Carry tray contents (captures sent while the canvas placeholder has no API). */
+/** Captures that were sent: clips placed on the canvas (when it is on screen) and those waiting in the carry tray (S3, S4). */
 export async function carry(page: Page) {
   return page.evaluate(() => {
-    const ui = (window as unknown as { __slateUi: { useApp: { getState(): { carry: { text: string; source: unknown; image?: Blob; imageSize?: unknown }[] } } } }).__slateUi;
-    return ui.useApp.getState().carry.map((c) => ({ text: c.text, source: c.source, hasImage: !!c.image, imageSize: c.imageSize }));
+    const w = window as unknown as {
+      __slate: { canvases: { model(slug: string): { objects(): Iterable<Record<string, any>> } } };
+      __slateUi: { useApp: { getState(): { canvas: string; carry: { text: string; source: unknown; image?: Blob; imageSize?: unknown }[] } } };
+    };
+    const app = w.__slateUi.useApp.getState();
+    const clips = [...w.__slate.canvases.model(app.canvas).objects()]
+      .filter((o) => o.kind === 'clip')
+      .sort((a, b) => a.created - b.created || a.y - b.y)
+      .map((o) => ({ text: o.text as string, source: o.source as unknown, hasImage: !!o.asset, imageSize: o.natural as unknown }));
+    const tray = app.carry.map((c) => ({ text: c.text, source: c.source, hasImage: !!c.image, imageSize: c.imageSize }));
+    return [...clips, ...tray];
   });
 }
 

@@ -111,12 +111,17 @@ export function EditDialog({ itemKind, id }: { itemKind: 'book' | 'clipping'; id
     close();
   };
   const Picker = getTopicPicker();
+  // the topic picker commits a typed path when it loses focus: let that commit (and the
+  // re-render it causes) happen before saving, with the latest state
+  const saveRef = useRef(save);
+  saveRef.current = save;
   return (
     <Dialog title={book ? 'Book details' : 'Clipping details'} onClose={close} labelId="edit-title">
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          void save();
+          (document.activeElement as HTMLElement | null)?.blur();
+          setTimeout(() => void saveRef.current(), 0);
         }}
       >
         <label className="field">
@@ -170,7 +175,7 @@ export function EditDialog({ itemKind, id }: { itemKind: 'book' | 'clipping'; id
           <button type="button" className="btn" onClick={close}>
             Cancel
           </button>
-          <button type="submit" className="btn primary">
+          <button type="submit" className="btn primary" onMouseDown={(e) => e.preventDefault()}>
             Save
           </button>
         </div>

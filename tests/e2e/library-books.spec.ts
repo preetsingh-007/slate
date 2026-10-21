@@ -111,7 +111,7 @@ test.describe('books', () => {
     await page.getByRole('button', { name: 'Margin note' }).click();
     await page.mouse.click(box.x + 400, box.y + 300);
     await page.getByRole('textbox', { name: 'Note text' }).fill('Compare with the gutter detection in Axiom');
-    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByTestId('pdf-note')).toHaveCount(1);
 
     // the file is never modified; the export is a flattened copy
@@ -166,7 +166,7 @@ test.describe('books', () => {
     await selectText(page, '[data-chapter="0"] .epub-html', 'algebraical patterns');
     await page.getByRole('dialog', { name: 'Selection actions' }).getByRole('button', { name: 'Add a note' }).click();
     await page.getByRole('textbox', { name: 'Note text' }).fill('Lovelace’s famous line');
-    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByTestId('margin-note')).toHaveCount(1);
 
     // dark reading theme
@@ -237,11 +237,11 @@ test.describe('books', () => {
     // tag a topic (plain-text fallback) and filter by it
     await items.filter({ hasText: 'Animals' }).getByRole('button', { name: /More actions/ }).click();
     await page.getByRole('menuitem', { name: /Edit details/ }).click();
-    await page.getByRole('textbox', { name: 'Add topic (gym path)' }).fill('math/probability/sampling');
-    await page.getByRole('textbox', { name: 'Add topic (gym path)' }).press('Enter');
+    await page.getByLabel('Add topic', { exact: true }).fill('math/probability/sampling');
+    await page.getByLabel('Add topic', { exact: true }).press('Enter');
     await page.getByRole('textbox', { name: 'Edition' }).fill('2');
     await expect(page.locator('output.citation')).toContainText('2nd edition');
-    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await page.getByRole('combobox', { name: 'Topic' }).selectOption('math/probability/sampling');
     await expect(items).toHaveCount(1);
     await expect(items.first()).toContainText('Animals of Australia');
@@ -282,7 +282,7 @@ test.describe('lasso and source links for books', () => {
     await expect(preview.locator('img')).toBeVisible();
     await expect(preview).toContainText('We cluster text runs into columns');
     await preview.getByRole('button', { name: 'Send to canvas' }).click();
-    // the canvas is a placeholder in this branch: captures wait in the carry tray (S4)
+    await expect.poll(async () => (await carry(page)).length).toBeGreaterThan(0);
     const c = await carry(page);
     expect(c).toHaveLength(1);
     expect(c[0].hasImage).toBe(true);
@@ -332,6 +332,7 @@ test.describe('lasso and source links for books', () => {
     await lassoRect(page, { x: table.x - 10, y: table.y - 4, width: table.width + 20, height: table.height + 8 });
     await expect(page.getByTestId('capture-preview')).toBeVisible();
     await page.getByTestId('capture-preview').getByRole('button', { name: 'Send to canvas' }).click();
+    await expect.poll(async () => (await carry(page)).length).toBeGreaterThan(0);
     const c = await carry(page);
     expect(c[0].text).toContain('| Operation | Cards |');
     expect(c[0].source).toMatchObject({ type: 'book', id, locator: { type: 'epub', chapter: 'OEBPS/text/ch1.xhtml', quote: { exact: expect.stringContaining('Operation') } } });
