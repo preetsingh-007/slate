@@ -131,4 +131,53 @@ test.describe('lasso from a gym file (S1, S2, S5, S6, G7)', () => {
     await page.evaluate((src) => (window as any).__slateGym.openSource(src), c.source);
     await expect(page.getByRole('status').getByText('is no longer in gym')).toBeVisible();
   });
+
+  test('drags a capture onto the canvas, or sends it below the latest content when the canvas is on screen (S3)', async ({ page }) => {
+    await openWithGym(page);
+    // a stand-in canvas: records the captures it receives and where
+    await page.evaluate(() => {
+      (window as any).__inserted = [];
+      (window as any).__slateGym.registerCanvasApi('main', {
+        insertCaptures: async (caps: any[], at?: { x: number; y: number }) => {
+          (window as any).__inserted.push({ texts: caps.map((c) => c.text), at: at ?? null });
+          return caps.map((c) => c.id);
+        },
+        revealObject: () => {},
+        revealRegion: () => {},
+        clientToCanvas: (x: number, y: number) => {
+          const r = document.querySelector('.pane-canvas')!.getBoundingClientRect();
+          return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom ? { x: x - r.left, y: y - r.top } : null;
+        },
+      });
+    });
+    await page.evaluate((p) => (window as any).__slateGym.app.getState().openTab({ kind: 'gym', path: p }), NOTES);
+    const md = pane(page).locator('.gym-md');
+    await pane(page).getByRole('button', { name: 'Rectangle lasso' }).click();
+    for (const text of ['A basis is defined in', 'Steps to diagonalise']) {
+      await md.locator('p', { hasText: text }).evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      const b = (await md.locator('p', { hasText: text }).boundingBox())!;
+      await rectLasso(page, { x: b.x - 4, y: b.y - 3, width: b.width + 8, height: b.height + 6 });
+    }
+    const cards = pane(page).locator('.gym-capture');
+    await expect(cards).toHaveCount(2);
+
+    // drag the first capture onto the canvas
+    const card = (await cards.first().boundingBox())!;
+    const canvas = (await page.locator('.pane-canvas').boundingBox())!;
+    await page.mouse.move(card.x + 40, card.y + 40);
+    await page.mouse.down();
+    await page.mouse.move(canvas.x + 200, canvas.y + 150, { steps: 10 });
+    await expect(page.locator('.gym-capture-ghost')).toBeVisible();
+    await page.mouse.up();
+    await expect(cards).toHaveCount(1);
+    const first = await page.evaluate(() => (window as any).__inserted[0]);
+    expect(first.texts[0]).toContain('A basis is defined in [Vector Spaces]');
+    expect(first.at.x).toBeCloseTo(200, -1);
+
+    // Send to canvas places the rest below the latest content (no point given)
+    await pane(page).getByRole('button', { name: 'Send to canvas' }).click();
+    const second = await page.evaluate(() => (window as any).__inserted[1]);
+    expect(second).toEqual({ texts: ['Steps to diagonalise:'], at: null });
+    expect(await page.evaluate(() => (window as any).__slateGym.app.getState().carry.length)).toBe(0);
+  });
 });

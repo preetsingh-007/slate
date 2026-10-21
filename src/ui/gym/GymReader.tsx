@@ -131,8 +131,13 @@ function LassoHost({ scroller, mode, onLasso }: { scroller: React.RefObject<HTML
 
 function Breadcrumbs({ path }: { path: string }) {
   const parts = path ? path.split('/') : [];
+  const ref = useRef<HTMLElement>(null);
+  // long paths scroll: keep the current item (the end) in view
+  useEffect(() => {
+    if (ref.current) ref.current.scrollLeft = ref.current.scrollWidth;
+  }, [path]);
   return (
-    <nav className="gym-crumbs" aria-label="Gym path">
+    <nav ref={ref} className="gym-crumbs" aria-label="Gym path">
       <button className="gym-crumb" onClick={() => openGym('')}>
         <Dumbbell size={14} aria-hidden /> Gym
       </button>
