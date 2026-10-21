@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-SCWgHpjlrBVdg7f0D97ZtqVAM06kIQkLBeF65pV8WXI=' blob:; style-src 'unsafe-inline' blob:; img-src blob: data:; font-src blob: data:; media-src blob: data:; connect-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snapshot</title>
+<script>
+// Slate snapshot frame (L8, L11, S1, S2, S6, S7). Loaded with sandbox="allow-scripts" (never
+// allow-same-origin): an opaque origin with no access to the app's storage, and this page's
+// CSP allows no network at all. The app sends the saved page and its assets over postMessage;
+// assets become blob: URLs here. Page scripts run only when the clipping's toggle is on.
+// The text walk matches documentText() in src/core/library/snapshot.ts.
+(() => {
+  'use strict';
+  const host = window.parent;
+  const post = (m) => host.postMessage(m, '*');
+  let urls = new Map();
+  let byUrl = new Map();
+  let cssByUrl = new Map();
+  let map = null;
+  let decor = { highlights: [], marks: [] };
+  let ui = null;
+
+  const nameOf = (ref) => {
+    const m = /(?:^|\/)([0-9a-f]{16,64}\.[a-z0-9]+)(?:[?#].*)?$/.exec(String(ref || '').trim());
+    return m ? m[1] : null;
+  };
+  const local = (ref) => {
+    const n = nameOf(ref);
+    return n ? urls.get(n) : undefined;
+  };
+  const rewriteCss = (css) =>
+    String(css || '')
+      .replace(/url\(\s*(['"]?)([^'")]+?)\1\s*\)/g, (all, q, ref) => {
+        const l = local(ref);
+        return l ? 'url(' + q + l + q + ')' : all;
+      })
+      .replace(/@import\s+(['"])([^'"]+)\1/g, (all, q, ref) => {
+        const l = local(ref);
+        return l ? '@import ' + q + l + q : all;
+      });
+
+  function rewriteDoc(doc) {
+    for (const el of doc.querySelectorAll('[src],[href],[poster]')) {
+      for (const a of ['src', 'href', 'poster', 'xlink:href']) {
+        const v = el.getAttribute(a);
+        if (v == null) continue;
+        const l = local(v);
+        if (l) el.setAttribute(a, l);
+      }
+    }
+    for (const el of doc.querySelectorAll('[style]')) el.setAttribute('style', rewriteCss(el.getAttribute('style')));
+    for (const st of doc.querySelectorAll('style')) st.textContent = rewriteCss(st.textContent);
+  }
+
+  async function load(msg) {
+    for (const u of urls.values()) URL.revokeObjectURL(u);
+    urls = new Map();
+    byUrl = new Map();
+    cssByUrl = new Map();
+    const entries = Object.entries(msg.assets || {});
+    for (const [name, blob] of entries) {
+      if (/\.css$/.test(name)) continue;
+      const u = URL.createObjectURL(blob);
+      urls.set(name, u);
+      byUrl.set(u, blob);
+    }
+    for (const [name, blob] of entries) {
+      if (!/\.css$/.test(name)) continue;
+      const css = rewriteCss(await blob.text());
+      const u = URL.createObjectURL(new Blob([css], { type: 'text/css' }));
+      urls.set(name, u);
+      cssByUrl.set(u, css);
+    }
+    const doc = new DOMParser().parseFromString(msg.html, 'text/html');
+    rewriteDoc(doc);
+    const scripts = [];
+    for (const s of doc.querySelectorAll('script')) {
+      if (msg.scripts) scripts.push({ attrs: [...s.attributes].map((a) => [a.name, a.value]), text: s.textContent || '' });
+      s.remove();
+    }
+    const root = document.importNode(doc.documentElement, true);
+    document.replaceChild(root, document.documentElement);
+    ui = null;
+    map = null;
+    decor = { highlights: [], marks: [] };
+    for (const s of scripts) {
+      const type = (s.attrs.find((a) => a[0] === 'type') || [])[1] || '';
+      if (type && !/^(module|text\/javascript|application\/javascript|text\/ecmascript)$/i.test(type)) continue;
+      const el = document.createElement('script');
+      for (const [k, v] of s.attrs) if (!/^(src|integrity|nonce|crossorigin)$/i.test(k)) el.setAttribute(k, v);
+      const src = (s.attrs.find((a) => a[0] === 'src') || [])[1];
+      if (src) {
+        const l = local(src);
+        if (!l) continue;
+        el.src = l;
+      } else el.src = URL.createObjectURL(new Blob([s.text], { type: 'text/javascript' }));
+      el.async = false;
+      document.body.appendChild(el);
+    }
+    if (msg.fraction) setTimeout(() => scrollToFraction(msg.fraction), 30);
+    post({ type: 'loaded' });
+  }
+
+  // ---------------------------------------------------------------- text map
+  function getMap() {
+    if (map) return map;
+    const nodes = [];
+    const starts = [];
+    let text = '';
+    const walk = (n) => {
+      if (n.nodeType === 3) {
+        nodes.push(n);
+        starts.push(text.length);
+        text += n.nodeValue || '';
+        return;
+      }
+      if (n.nodeType !== 1) return;
+      if (/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|HEAD)$/i.test(n.tagName) || (n.classList && n.classList.contains('katex-mathml')) || n.hasAttribute('data-slate-ui')) return;
+      for (let c = n.firstChild; c; c = c.nextSibling) walk(c);
+    };
+    if (document.body) walk(document.body);
+    map = { text, nodes, starts };
+    return map;
+  }
+
+  function offsetOf(node, offset) {
+    const m = getMap();
+    if (node.nodeType === 3) {
+      const i = m.nodes.indexOf(node);
+      if (i >= 0) return m.starts[i] + Math.min(offset, (node.nodeValue || '').length);
+    }
+    const probe = document.createRange();
+    probe.setStart(node, offset);
+    for (let i = 0; i < m.nodes.length; i++) {
+      const r = document.createRange();
+      r.selectNodeContents(m.nodes[i]);
+      if (r.compareBoundaryPoints(Range.START_TO_START, probe) >= 0) return m.starts[i];
+    }
+    return m.text.length;
+  }
+
+  function rangeOf(start, end) {
+    const m = getMap();
+    if (!m.nodes.length || end < start) return null;
+    const locate = (off, isEnd) => {
+      let lo = 0;
+      let hi = m.nodes.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (m.starts[mid] < off || (!isEnd && m.starts[mid] === off)) lo = mid;
+        else hi = mid - 1;
+      }
+      const n = m.nodes[lo];
+      return [n, Math.max(0, Math.min((n.nodeValue || '').length, off - m.starts[lo]))];
+    };
+    const a = locate(start, false);
+    const b = locate(end, true);
+    const r = document.createRange();
+    r.setStart(a[0], a[1]);
+    r.setEnd(b[0], b[1]);
+    return r;
+  }
+
+  const inPoly = (x, y, poly) => {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [xi, yi] = poly[i];
+      const [xj, yj] = poly[j];
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi || 1e-9) + xi) inside = !inside;
+    }
+    return inside;
+  };
+
+  // ---------------------------------------------------------------- overlays
+  function overlayRoot() {
+    if (ui && ui.isConnected) return ui;
+    ui = document.createElement('div');
+    ui.setAttribute('data-slate-ui', '');
+    ui.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;z-index:2147483647;pointer-events:none;';
+    document.documentElement.appendChild(ui);
+    return ui;
+  }
+  const rectsOf = (range) => [...range.getClientRects()].filter((r) => r.width >= 1 && r.height >= 1);
+  function box(r, style) {
+    const d = document.createElement('div');
+    d.style.cssText = 'position:absolute;left:' + (r.left + scrollX) + 'px;top:' + (r.top + scrollY) + 'px;width:' + r.width + 'px;height:' + r.height + 'px;' + style;
+    return d;
+  }
+  function render() {
+    const root = overlayRoot();
+    root.replaceChildren();
+    const W = document.documentElement.clientWidth;
+    for (const h of decor.highlights) {
+      const r = rangeOf(h.start, h.end);
+      if (!r) continue;
+      for (const rc of rectsOf(r)) root.appendChild(box(rc, 'background:' + h.color + ';opacity:.4;mix-blend-mode:multiply;border-radius:2px;'));
+      if (h.note) {
+        const first = rectsOf(r)[0];
+        if (first) {
+          const b = document.createElement('button');
+          b.textContent = '✎';
+          b.title = h.note;
+          b.setAttribute('aria-label', 'Margin note: ' + h.note);
+          b.style.cssText = 'position:absolute;left:' + (W - 26 + scrollX) + 'px;top:' + (first.top + scrollY) + 'px;width:22px;height:22px;border:0;border-radius:6px;background:#f5d742;cursor:pointer;pointer-events:auto;font:12px sans-serif;';
+          b.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const br = b.getBoundingClientRect();
+            post({ type: 'note-click', id: h.id, rect: { x: br.left, y: br.top, w: br.width, h: br.height } });
+          });
+          root.appendChild(b);
+        }
+      }
+    }
+    for (const mk of decor.marks) {
+      const r = rangeOf(mk.start, mk.end);
+      const rs = r ? rectsOf(r) : [];
+      if (!rs.length) continue;
+      const top = rs[0].top + scrollY;
+      const bottom = rs[rs.length - 1].bottom + scrollY;
+      const b = document.createElement('button');
+      b.setAttribute('aria-label', mk.label);
+      b.title = mk.label;
+      b.style.cssText = 'position:absolute;left:' + (scrollX + 2) + 'px;top:' + top + 'px;width:6px;height:' + Math.max(12, bottom - top) + 'px;border:0;border-radius:3px;background:rgba(47,111,222,.45);cursor:pointer;pointer-events:auto;padding:0;';
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const br = b.getBoundingClientRect();
+        post({ type: 'mark-click', key: mk.key, rect: { x: br.left, y: br.top, w: br.width, h: br.height } });
+      });
+      root.appendChild(b);
+    }
+  }
+  function flash(start, end) {
+    const r = rangeOf(start, end);
+    if (!r) return;
+    const rs = rectsOf(r);
+    if (rs[0]) scrollTo({ top: Math.max(0, rs[0].top + scrollY - innerHeight / 3) });
+    const root = overlayRoot();
+    const made = rectsOf(r).map((rc) => root.appendChild(box(rc, 'background:rgba(255,196,0,.45);outline:3px solid rgba(255,196,0,.9);border-radius:3px;transition:opacity .4s;')));
+    for (const d of made) d.setAttribute('data-flash', '');
+    setTimeout(() => made.forEach((d) => (d.style.opacity = '0')), 1600);
+    setTimeout(() => made.forEach((d) => d.remove()), 2000);
+  }
+
+  // ---------------------------------------------------------------- capture (S2)
+  const dataUrl = (blob) =>
+    new Promise((res) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = () => res(null);
+      r.readAsDataURL(blob);
+    });
+  async function inlineUrls(css) {
+    const refs = [...new Set([...String(css || '').matchAll(/url\(\s*(['"]?)(blob:[^'")]+)\1\s*\)/g)].map((m) => m[2]))];
+    let out = String(css || '');
+    for (const u of refs) {
+      const b = byUrl.get(u);
+      const d = b ? await dataUrl(b) : null;
+      out = out.split(u).join(d || 'about:blank');
+    }
+    return out;
+  }
+  async function rasterize(x, y, w, h, scale) {
+    try {
+      const clone = document.documentElement.cloneNode(true);
+      for (const n of clone.querySelectorAll('script, [data-slate-ui], iframe, video, audio')) n.remove();
+      for (const l of clone.querySelectorAll('link')) {
+        const css = cssByUrl.get(l.getAttribute('href'));
+        if (css == null) {
+          l.remove();
+          continue;
+        }
+        const st = document.createElement('style');
+        st.textContent = await inlineUrls(css);
+        l.replaceWith(st);
+      }
+      for (const st of clone.querySelectorAll('style')) st.textContent = await inlineUrls(st.textContent);
+      for (const el of clone.querySelectorAll('[style]')) el.setAttribute('style', await inlineUrls(el.getAttribute('style')));
+      for (const img of clone.querySelectorAll('img')) {
+        const b = byUrl.get(img.getAttribute('src'));
+        const d = b ? await dataUrl(b) : null;
+        if (d) img.setAttribute('src', d);
+        else img.removeAttribute('src');
+        img.removeAttribute('srcset');
+      }
+      const W = document.documentElement.clientWidth;
+      const H = Math.max(document.documentElement.scrollHeight, innerHeight);
+      clone.style.width = W + 'px';
+      const xml = new XMLSerializer().serializeToString(clone);
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="' + x + ' ' + y + ' ' + w + ' ' + h + '"><foreignObject x="0" y="0" width="' + W + '" height="' + H + '">' + xml + '</foreignObject></svg>';
+      const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+      try {
+        const img = new Image();
+        img.src = url;
+        await img.decode();
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(w * scale));
+        c.height = Math.max(1, Math.round(h * scale));
+        const ctx = c.getContext('2d');
+        const bg = getComputedStyle(document.body).backgroundColor;
+        ctx.fillStyle = !bg || bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent' ? '#fff' : bg;
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        return await new Promise((res) => {
+          try {
+            c.toBlob((b) => res(b), 'image/png');
+          } catch (e) {
+            res(null);
+          }
+        });
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function capture(msg) {
+    const poly = msg.poly;
+    const xs = poly.map((p) => p[0]);
+    const ys = poly.map((p) => p[1]);
+    const bx = { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+    const m = getMap();
+    let first = null;
+    let last = null;
+    const r = document.createRange();
+    for (let i = 0; i < m.nodes.length; i++) {
+      const node = m.nodes[i];
+      const v = node.nodeValue || '';
+      if (!v.trim()) continue;
+      r.selectNodeContents(node);
+      const nb = r.getBoundingClientRect();
+      if (nb.bottom < bx.y0 || nb.top > bx.y1 || nb.right < bx.x0 || nb.left > bx.x1) continue;
+      const re = /\S+/g;
+      let w;
+      while ((w = re.exec(v))) {
+        r.setStart(node, w.index);
+        r.setEnd(node, w.index + w[0].length);
+        const wb = r.getBoundingClientRect();
+        if (!wb.width && !wb.height) continue;
+        if (!inPoly(wb.left + wb.width / 2, wb.top + wb.height / 2, poly)) continue;
+        const s = m.starts[i] + w.index;
+        if (!first) first = { node, offset: w.index, text: s };
+        last = { node, offset: w.index + w[0].length, text: s + w[0].length };
+      }
+    }
+    for (const el of document.querySelectorAll('img, svg, .katex, math')) {
+      if (el.closest('.katex-mathml, [data-slate-ui]')) continue;
+      const b = el.getBoundingClientRect();
+      if (b.width < 4 || !inPoly(b.left + b.width / 2, b.top + b.height / 2, poly)) continue;
+      const pr = document.createRange();
+      pr.selectNode(el);
+      const s = offsetOf(pr.startContainer, pr.startOffset);
+      const e = offsetOf(pr.endContainer, pr.endOffset);
+      if (!first || s < first.text) first = { node: pr.startContainer, offset: pr.startOffset, text: s };
+      if (!last || e > last.text) last = { node: pr.endContainer, offset: pr.endOffset, text: e };
+    }
+    let html = '';
+    let start = -1;
+    let end = -1;
+    if (first && last) {
+      const range = document.createRange();
+      range.setStart(first.node, first.offset);
+      range.setEnd(last.node, last.offset);
+      let node = range.cloneContents();
+      for (let n = range.commonAncestorContainer; n && n !== document.body; n = n.parentNode) {
+        if (n.nodeType !== 1 || !/^(TABLE|THEAD|TBODY|TFOOT|TR|UL|OL|LI|PRE|BLOCKQUOTE|CODE|H[1-6]|DL|DT|DD|FIGURE)$/.test(n.tagName)) continue;
+        const shell = n.cloneNode(false);
+        shell.appendChild(node);
+        node = shell;
+      }
+      const div = document.createElement('div');
+      div.appendChild(node);
+      html = div.innerHTML;
+      start = first.text;
+      end = Math.max(first.text, last.text);
+    }
+    const rect = { x: bx.x0 + scrollX, y: bx.y0 + scrollY, w: bx.x1 - bx.x0, h: bx.y1 - bx.y0 };
+    const image = await rasterize(rect.x, rect.y, rect.w, rect.h, msg.scale || 2);
+    post({
+      type: 'captured',
+      id: msg.id,
+      html,
+      start,
+      end,
+      rect,
+      docW: document.documentElement.scrollWidth,
+      docH: document.documentElement.scrollHeight,
+      image,
+      imageSize: { w: Math.round(rect.w), h: Math.round(rect.h) },
+    });
+  }
+
+  function scrollToFraction(f) {
+    const max = document.documentElement.scrollHeight - innerHeight;
+    scrollTo({ top: Math.max(0, f * max) });
+  }
+
+  // ---------------------------------------------------------------- events
+  addEventListener('message', (e) => {
+    if (e.source !== host) return;
+    const msg = e.data || {};
+    if (msg.type === 'load') void load(msg);
+    else if (msg.type === 'decorate') {
+      decor = { highlights: msg.highlights || [], marks: msg.marks || [] };
+      render();
+    } else if (msg.type === 'reveal') flash(msg.start, msg.end);
+    else if (msg.type === 'capture') void capture(msg);
+    else if (msg.type === 'scrollBy') scrollBy({ top: msg.dy || 0, left: msg.dx || 0 });
+    else if (msg.type === 'scrollTo') scrollToFraction(msg.fraction || 0);
+    else if (msg.type === 'text') post({ type: 'text', text: getMap().text });
+  });
+  // links open outside the frame (never navigate the frame to another site)
+  addEventListener(
+    'click',
+    (e) => {
+      const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+      if (a) {
+        const href = a.getAttribute('href') || '';
+        if (href.startsWith('#')) return;
+        e.preventDefault();
+        if (/^https?:/i.test(a.href)) post({ type: 'link', href: a.href });
+        return;
+      }
+      const sel = getSelection();
+      if (sel && !sel.isCollapsed) return;
+      for (const h of decor.highlights) {
+        const r = rangeOf(h.start, h.end);
+        if (!r) continue;
+        for (const rc of rectsOf(r)) {
+          if (e.clientX >= rc.left && e.clientX <= rc.right && e.clientY >= rc.top && e.clientY <= rc.bottom) {
+            post({ type: 'highlight-click', id: h.id, rect: { x: e.clientX, y: e.clientY, w: 1, h: 1 } });
+            return;
+          }
+        }
+      }
+    },
+    true,
+  );
+  addEventListener('submit', (e) => e.preventDefault(), true);
+  let selTimer = 0;
+  const onSel = () => {
+    clearTimeout(selTimer);
+    selTimer = setTimeout(() => {
+      const s = getSelection();
+      if (!s || s.isCollapsed || !s.rangeCount) return post({ type: 'selection', none: true });
+      const r = s.getRangeAt(0);
+      const start = offsetOf(r.startContainer, r.startOffset);
+      const end = offsetOf(r.endContainer, r.endOffset);
+      const b = r.getBoundingClientRect();
+      if (end > start) post({ type: 'selection', start, end, text: getMap().text.slice(start, end), rect: { x: b.left, y: b.top, w: b.width, h: b.height } });
+    }, 80);
+  };
+  addEventListener('pointerup', onSel);
+  addEventListener('keyup', onSel);
+  let scrollTimer = 0;
+  addEventListener(
+    'scroll',
+    () => {
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => {
+        const max = document.documentElement.scrollHeight - innerHeight;
+        post({ type: 'scroll', fraction: max > 0 ? scrollY / max : 0 });
+      }, 300);
+    },
+    { passive: true },
+  );
+  addEventListener('resize', () => {
+    if (decor.highlights.length || decor.marks.length) render();
+  });
+  post({ type: 'ready' });
+})();
+</script>
+</head>
+<body></body>
+</html>

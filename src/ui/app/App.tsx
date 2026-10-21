@@ -4,6 +4,7 @@ import { useApp } from './store';
 import { Workspace } from './Workspace';
 import { CanvasPane } from '../canvas/CanvasPane';
 import { ToastHost, useNarrow } from '../common/toast';
+import { LibraryButtons, LibraryMount } from '../library/register';
 
 export function App() {
   const canvas = useApp((s) => s.canvas);
@@ -20,6 +21,7 @@ export function App() {
     <div className="app">
       <header className="topbar" role="toolbar" aria-label="App">
         <span className="title">Slate</span>
+        <LibraryButtons />
         <span className="spacer" />
         {narrow && hasTabs && (
           <button
@@ -38,6 +40,7 @@ export function App() {
         )}
       </header>
       <Workspace canvas={<CanvasPane slug={canvas} />} />
+      <LibraryMount />
       <ToastHost />
     </div>
   );

@@ -2,6 +2,9 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './ui/app/App';
 import { ServicesContext, createServices, requestPersistentStorage } from './app/services';
+import { useApp } from './ui/app/store';
+import * as registries from './ui/common/registries';
+import { useLibraryUi } from './ui/library/state';
 import 'katex/dist/katex.min.css';
 import './ui/styles/global.css';
 
@@ -11,7 +14,11 @@ async function start() {
     const services = await createServices();
     void requestPersistentStorage();
     // test builds expose the services to Playwright (seeding data, inspecting state)
-    if (import.meta.env.VITE_SLATE_E2E) (window as unknown as { __slate: unknown }).__slate = services;
+    if (import.meta.env.VITE_SLATE_E2E) {
+      (window as unknown as { __slate: unknown }).__slate = services;
+      // UI state and registries for tests (carry tray, captures, a fake canvas API)
+      (window as unknown as { __slateUi: unknown }).__slateUi = { useApp, registries, useLibraryUi };
+    }
     root.render(
       <StrictMode>
         <ServicesContext.Provider value={services}>
