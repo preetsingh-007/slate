@@ -30,7 +30,6 @@ import { bbox, pointInPolygon } from '../../../core/ink/geometry';
 import { HIGHLIGHTER_ALPHA, resolveInkColor, strokeOutline, traceOutline } from '../../../core/ink/render';
 import { PointSmoother, PressureSimulator, quantizePoints } from '../../../core/ink/smoothing';
 import { Emitter } from '../../../core/util/emitter';
-import { isoDate } from '../../../core/util/time';
 import { compareZ } from '../../../core/util/zindex';
 import type { CanvasController } from '../controller';
 import { ERASER_PX, useTools, type Tool } from '../toolStore';
@@ -207,6 +206,7 @@ export class CanvasEngine {
     }
     this.width = w;
     this.height = h;
+    this.tiles.sizeFor(w, h);
     for (const c of [this.display, this.wet]) {
       c.width = Math.max(1, Math.round(w * dpr));
       c.height = Math.max(1, Math.round(h * dpr));
@@ -283,10 +283,9 @@ export class CanvasEngine {
 
   /** C20 / "jump to now": just below the latest content, where today's line is or will be. */
   jumpToNow(animate = true) {
-    const today = isoDate();
-    const line = this.ctl.model.dayLines().get(today);
+    // where new work goes: just below the latest content (today's line or its preview)
     const bottom = this.ctl.contentBottom();
-    const y = line ?? previewLineY(bottom);
+    const y = previewLineY(bottom);
     // left edge: the left of the latest content (the bottom 600 units of it), or the origin
     let left = 0;
     const recent = bottom === null ? [] : this.ctl.model.query({ x: -1e9, y: bottom - 600, w: 2e9, h: 600 });

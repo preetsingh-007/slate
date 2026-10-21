@@ -9,7 +9,7 @@ import type { CanvasChange, CanvasModel } from '../../../core/canvas/model';
 import type { CanvasObject, Rect } from '../../../core/model/types';
 import type { Camera } from '../../../core/canvas/camera';
 import { objectBounds } from '../../../core/canvas/bounds';
-import { levelFor, levelScale, TILE_PX, TileCache, tileRect, tilesFor, type TileId } from '../../../core/canvas/tiles';
+import { levelFor, levelScale, TILE_PX, TileCache, tileKey, tileRect, tilesFor, type TileId } from '../../../core/canvas/tiles';
 import { compareZ } from '../../../core/util/zindex';
 import { ctx2d, drawInk, makeCanvas } from './draw';
 
@@ -147,6 +147,15 @@ export class TileLayer {
     return c;
   }
 
+  /** Cache size for a view of w × h CSS pixels: the view and a ring around it, plus one more level. */
+  sizeFor(w: number, h: number) {
+    // tiles show at 1/√2 to 1 × their size, so up to √2 more of them per axis than at 100%
+    const cols = Math.ceil((w * Math.SQRT2) / TILE_PX) + 1;
+    const rows = Math.ceil((h * Math.SQRT2) / TILE_PX) + 1;
+    this.capacity = Math.min(200, (cols + 2) * (rows + 2) + cols * rows);
+    this.cache.setCapacity(this.capacity);
+  }
+
   /**
    * Renders missing or stale tiles under the view (plus a ring around it when time allows)
    * within `budgetMs`. Returns true when everything visible is fresh.
@@ -155,26 +164,29 @@ export class TileLayer {
     const level = levelFor(cam.zoom);
     const view = this.view(cam, w, h);
     const t0 = performance.now();
-    let fresh = true;
-    for (const t of tilesFor(view, level, this.base)) {
+    const visible = tilesFor(view, level, this.base);
+    // the visible tiles are the most recently used: rendering others never evicts them
+    for (const t of visible) this.cache.get(t);
+    for (const t of visible) {
       const e = this.cache.peek(t);
       if (e && !e.dirty) continue;
-      if (performance.now() - t0 > budgetMs) {
-        fresh = false;
-        break;
-      }
+      if (performance.now() - t0 > budgetMs) return false;
       this.renderTile(t);
     }
-    if (fresh && performance.now() - t0 < budgetMs / 2) {
+    const ring = tilesFor(view, level, this.base, 1);
+    if (ring.length <= this.capacity - visible.length / 2 && performance.now() - t0 < budgetMs / 2) {
       // prefetch one ring around the view for panning
-      for (const t of tilesFor(view, level, this.base, 1)) {
+      const inView = new Set(visible.map(tileKey));
+      for (const t of ring) {
+        if (inView.has(tileKey(t))) continue;
         const e = this.cache.peek(t);
         if (e && !e.dirty) continue;
-        if (performance.now() - t0 > budgetMs / 2) return true;
+        if (performance.now() - t0 > budgetMs / 2) break;
         this.renderTile(t);
+        for (const v of visible) this.cache.get(v);
       }
     }
-    return fresh;
+    return this.isFresh(cam, w, h);
   }
 
   private view(cam: Camera, w: number, h: number): Rect {

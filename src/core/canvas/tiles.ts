@@ -80,6 +80,11 @@ export class TileCache<T> {
     return this.map.size;
   }
 
+  setCapacity(n: number) {
+    this.capacity = Math.max(1, n);
+    this.trim();
+  }
+
   /** Changes the 100% scale; every tile is dropped (their canvas extent changed). */
   setBase(base: number) {
     if (base === this.base) return;

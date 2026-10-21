@@ -134,14 +134,50 @@ export function drawShape(ctx: CanvasRenderingContext2D, s: Pick<ShapeObject, 'g
   ctx.stroke();
 }
 
-/** Draws ink objects (z order is the caller's); hidden and non-ink objects are skipped. */
+/**
+ * Draws ink objects (z order is the caller's); hidden and non-ink objects are skipped.
+ * Far out, runs of consecutive strokes with the same colour and width are drawn as one path
+ * (one stroke() call for hundreds of centre-lines), which keeps zoomed-out tiles cheap (C3).
+ */
 export function drawInk(ctx: CanvasRenderingContext2D, objects: Iterable<CanvasObject>, st: DrawStyle, hidden?: ReadonlySet<string>) {
+  let run: { color: string; width: number; alpha: number } | null = null;
+  const flush = () => {
+    if (!run) return;
+    ctx.stroke();
+    run = null;
+  };
   for (const o of objects) {
     if (hidden?.has(o.id)) continue;
     if (o.kind === 'stroke') {
-      if (!o.beautifiedInto) drawStroke(ctx, o, st);
-    } else if (o.kind === 'shape') drawShape(ctx, o, st);
+      if (o.beautifiedInto || o.pts.length < 3) continue;
+      if (strokeLod(o.w + o.size, o.h + o.size, st.pxPerUnit) === 'line') {
+        const color = resolveInkColor(o.color, st.ink);
+        const width = Math.max(o.size * 0.8, 0.8 / st.pxPerUnit);
+        const alpha = o.tool === 'highlighter' ? HIGHLIGHTER_ALPHA : 1;
+        if (!run || run.color !== color || run.width !== width || run.alpha !== alpha) {
+          flush();
+          run = { color, width, alpha };
+          ctx.globalAlpha = alpha;
+          ctx.strokeStyle = color;
+          ctx.lineWidth = width;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.beginPath();
+        }
+        const flat = decimate(o.pts, 1.5 / st.pxPerUnit);
+        ctx.moveTo(flat[0], flat[1]);
+        if (flat.length === 2) ctx.lineTo(flat[0] + 0.01, flat[1]);
+        for (let i = 2; i + 1 < flat.length; i += 2) ctx.lineTo(flat[i], flat[i + 1]);
+        continue;
+      }
+      flush();
+      drawStroke(ctx, o, st);
+    } else if (o.kind === 'shape') {
+      flush();
+      drawShape(ctx, o, st);
+    }
   }
+  flush();
   ctx.globalAlpha = 1;
 }
 

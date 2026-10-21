@@ -4,7 +4,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import type { Rect } from '../../core/model/types';
-import { objectBounds, unionRect } from '../../core/canvas/bounds';
+import { unionRect } from '../../core/canvas/bounds';
 import { dayLabel } from '../../core/util/time';
 import { centerOn } from '../../core/canvas/camera';
 import { useCanvas, useFrame } from './context';
@@ -46,23 +46,32 @@ export function Minimap() {
       const loaded = new Set(ctl.model.loadedMonths());
       for (const [m, s] of Object.entries(ctl.recordedSegments())) if (s && !loaded.has(m)) ctx.fillRect(s.x, s.y, s.w, s.h);
       ctx.globalAlpha = 0.55;
-      const min = 1.2 / k;
-      for (const o of ctl.model.objects()) {
-        if (o.kind === 'stroke' && o.beautifiedInto) continue;
-        const ob = objectBounds(o);
-        ctx.fillRect(ob.x, ob.y, Math.max(min, ob.w), Math.max(min, ob.h));
+      // occupancy at the minimap's resolution: one rectangle per occupied cell, however many objects
+      const cell = 1.5 / k;
+      const cols = Math.ceil(r.w / cell) + 1;
+      const occupied = new Uint8Array(cols * (Math.ceil(r.h / cell) + 1));
+      const idx = ctl.model.index;
+      for (const id of idx.ids()) {
+        const ob = idx.box(id)!;
+        const x0 = Math.floor((ob.x - r.x) / cell);
+        const y0 = Math.floor((ob.y - r.y) / cell);
+        const x1 = Math.floor((ob.x + ob.w - r.x) / cell);
+        const y1 = Math.floor((ob.y + ob.h - r.y) / cell);
+        for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) occupied[y * cols + x] = 1;
       }
+      for (let i = 0; i < occupied.length; i++) if (occupied[i]) ctx.fillRect(r.x + (i % cols) * cell, r.y + Math.floor(i / cols) * cell, cell, cell);
       draw();
     };
     render();
+    const idle = (fn: () => void) => (typeof requestIdleCallback === 'function' ? requestIdleCallback(fn, { timeout: 1000 }) : fn());
     const off = ctl.model.onChange.on(() => {
       clearTimeout(t);
-      t = setTimeout(render, 400);
+      t = setTimeout(() => idle(render), 400);
     });
     // the view left the overview: widen it
     const offSettle = engine.settled.on((v) => {
       const w = worldRef.current;
-      if (!w || v.x < w.x || v.y < w.y || v.x + v.w > w.x + w.w || v.y + v.h > w.y + w.h) render();
+      if (!w || v.x < w.x || v.y < w.y || v.x + v.w > w.x + w.w || v.y + v.h > w.y + w.h) idle(render);
     });
     return () => {
       off();

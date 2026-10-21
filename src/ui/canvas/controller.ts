@@ -97,8 +97,10 @@ export class CanvasController implements ObjectLookup {
   addObjects(objects: CanvasObject[], extra?: (tx: CanvasTx) => void): void {
     if (!objects.length) return;
     const date = isoDate(this.now());
-    const top = Math.min(...objects.map((o) => objectBounds(o).y));
-    const lineY = dayLineFor(date, top, this.contentBottom(), this.model.dayLines());
+    // only objects created today count (pasted and new objects are; restored pieces are not)
+    const todays = objects.filter((o) => isoDate(o.created) === date);
+    const top = todays.length ? Math.min(...todays.map((o) => objectBounds(o).y)) : 0;
+    const lineY = todays.length ? dayLineFor(date, top, this.contentBottom(), this.model.dayLines()) : null;
     this.model.transact((tx) => {
       for (const o of objects) tx.add(o);
       if (lineY !== null) tx.setDay(date, lineY);
