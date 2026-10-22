@@ -75,6 +75,9 @@ test.describe('Milestone 4: lasso onto the canvas and back through the badge, al
     const box = (await page.locator('.pdfv-page[data-page="1"]').boundingBox())!;
     const s = box.width / 612;
     await lassoRect(page, { x: box.x + 310 * s, y: box.y + 155 * s, width: 280 * s, height: 120 * s });
+    // S3: the preview, however tall, stays on screen with its Send button
+    const card = (await page.getByTestId('capture-preview').boundingBox())!;
+    expect(card.y + card.height).toBeLessThanOrEqual(page.viewportSize()!.height);
     await page.getByTestId('capture-preview').getByRole('button', { name: 'Send to canvas' }).click();
     const clip = await newClip(page, 0);
     expect(clip.asset).toBeTruthy();
