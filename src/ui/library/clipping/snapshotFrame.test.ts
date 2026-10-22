@@ -25,4 +25,16 @@ describe('snapshot frame isolation (L8, non-functional: web content isolation)',
     expect(html).toContain('if (e.source !== host) return;');
     expect(html).toMatch(/e\.preventDefault\(\);\s+if \(\/\^https\?:\/i\.test\(a\.href\)\) post\(\{ type: 'link'/);
   });
+
+  it("L8: the frame is never given the owner's note text (page scripts may run there)", async () => {
+    const { decorateMessage } = await import('./frameMessages');
+    const msg = decorateMessage([{ id: 'n1', start: 1, end: 5, color: 'transparent', note: 'my private thought' }, { id: 'h1', start: 6, end: 9, color: '#ff0' }], [{ key: '0', start: 1, end: 2, label: '1 clip from here' }]);
+    expect(JSON.stringify(msg)).not.toContain('my private thought');
+    expect(msg.highlights).toEqual([
+      { id: 'n1', start: 1, end: 5, color: 'transparent', note: true },
+      { id: 'h1', start: 6, end: 9, color: '#ff0', note: false },
+    ]);
+    // and the frame does not show a note's text (its button has a fixed label)
+    expect(html).not.toMatch(/[=+,]\s*h\.note\b/);
+  });
 });

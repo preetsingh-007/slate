@@ -7,21 +7,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStylusNoScroll } from '../viewerParts';
 import { LassoOverlay, type LassoResult } from '../../sources/LassoOverlay';
+import { decorateMessage, type FrameHighlight, type FrameMark } from './frameMessages';
 
-export interface FrameHighlight {
-  id: string;
-  start: number;
-  end: number;
-  color: string;
-  note?: string;
-}
-
-export interface FrameMark {
-  key: string;
-  start: number;
-  end: number;
-  label: string;
-}
+export type { FrameHighlight, FrameMark };
 
 export interface FrameCapture {
   html: string;
@@ -127,7 +115,7 @@ export function SnapshotFrame(p: Props) {
 
   // decorations follow the annotations
   useEffect(() => {
-    if (ready) send({ type: 'decorate', highlights: p.highlights, marks: p.marks });
+    if (ready) send(decorateMessage(p.highlights, p.marks));
   }, [ready, p.highlights, p.marks]);
 
   p.controller.current = {

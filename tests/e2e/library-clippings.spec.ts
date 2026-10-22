@@ -165,8 +165,11 @@ test.describe('New from link', () => {
     });
     expect(probe).toEqual({ origin: 'null', localStorage: 'blocked', indexedDB: 'blocked', parent: 'blocked', fetch: 'blocked' });
     expect(await frame.locator('body').getAttribute('data-scripted')).toBeNull();
+    await expect(page.getByTestId('scripts-warning')).toHaveCount(0);
     await page.getByRole('checkbox', { name: /Scripts/ }).check();
     await expect(page.frameLocator('[data-testid="snapshot-frame"]').locator('body')).toHaveAttribute('data-scripted', 'yes');
+    // turning scripts on says what they can see
+    await expect(page.getByTestId('scripts-warning')).toContainText('scripts are running');
   });
 
   test('L10: an arXiv abstract page offers its PDF, imported as a book', async ({ page }) => {

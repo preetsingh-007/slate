@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-nGjOfgSiB33ARru/DGyb8Qhoscgdlw+iAucCyTvl8jE=' blob:; style-src 'unsafe-inline' blob:; img-src blob: data:; font-src blob: data:; media-src blob: data:; connect-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+r1Q/CfnqyY3S66lpy8WiMiVpUdExS7AAqzL/UcVlyA=' blob:; style-src 'unsafe-inline' blob:; img-src blob: data:; font-src blob: data:; media-src blob: data:; connect-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Snapshot</title>
@@ -203,9 +203,10 @@
         const first = rectsOf(r)[0];
         if (first) {
           const b = document.createElement('button');
+          // the note's text stays in the app: page scripts may run here (only that a note exists is sent)
           b.textContent = '✎';
-          b.title = h.note;
-          b.setAttribute('aria-label', 'Margin note: ' + h.note);
+          b.title = 'Margin note';
+          b.setAttribute('aria-label', 'Margin note');
           b.style.cssText = 'position:absolute;left:' + (W - 26 + scrollX) + 'px;top:' + (first.top + scrollY) + 'px;width:22px;height:22px;border:0;border-radius:6px;background:#f5d742;cursor:pointer;pointer-events:auto;font:12px sans-serif;';
           b.addEventListener('click', (e) => {
             e.stopPropagation();

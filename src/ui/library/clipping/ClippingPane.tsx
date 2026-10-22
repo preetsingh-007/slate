@@ -5,7 +5,7 @@
  * top, anchored with text quotes so they show in both views where the text matches.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ExternalLink, FileCode2, Highlighter, Lasso, MousePointer2, NotebookPen, StickyNote, X } from 'lucide-react';
+import { ExternalLink, FileCode2, Highlighter, Lasso, MousePointer2, NotebookPen, StickyNote, TriangleAlert, X } from 'lucide-react';
 import type { Annotation, ClippingLocator, ClippingMeta, PaneTab } from '../../../core/model/types';
 import type { Capture } from '../../../core/model/capture';
 import type { ClippingContent } from '../../../core/stores/library';
@@ -484,6 +484,14 @@ function ClippingView({ meta, content }: { meta: ClippingMeta; content: Clipping
           <NotebookPen size={18} />
         </button>
       </div>
+      {shownView === 'original' && scriptsOn && (
+        // L8: page scripts run sandboxed, but may send what the frame shows to their own site
+        <div className="warning snapshot-warning" role="note" data-testid="scripts-warning">
+          <p>
+            <TriangleAlert size={14} aria-hidden /> The page’s own scripts are running. They can see the page, what you select and where your highlights are, and could send that to their site. Your notes stay in Slate. Turn Scripts off for pages you do not trust.
+          </p>
+        </div>
+      )}
       <div className="viewer-main">
         {drawer && (
           <aside className="viewer-drawer" aria-label="Annotations">

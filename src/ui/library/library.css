@@ -1141,6 +1141,16 @@
   margin: 0 0 6px;
 }
 
+.snapshot-warning {
+  margin: 6px 8px 0;
+  font-size: 13px;
+}
+
+.snapshot-warning p {
+  margin: 0;
+  align-items: baseline;
+}
+
 .clip-summary {
   max-height: 180px;
   overflow: auto;
