@@ -48,7 +48,7 @@ The app runs in one tab at a time: `main.tsx` holds a Web Lock (`app/tabLock.ts`
 
 ## Canvas
 
-A canvas is a set of monthly segment documents presented as one surface by [`CanvasModel`](../src/core/canvas/model.ts). An object lives in the segment of the month it was created in. Write through `model.transact(tx => …)`: one call is one undo step, even across segments. Text-box text is a `Y.Text` (`model.textOf(id)`); edit it with origin `'local'` so typing is undoable.
+A canvas is a set of monthly segment documents presented as one surface by [`CanvasModel`](../src/core/canvas/model.ts). An object lives in the segment of the month it was created in. Write through `model.transact(tx => …)`: one call is one undo step, even across segments. A write to a month that is not loaded yet (the first stroke after midnight on the 1st) waits in the model until that month opens, shown meanwhile, and joins the same undo step; the controller also loads the new month at midnight and on returning to the app. Text-box text is a `Y.Text` (`model.textOf(id)`); edit it with origin `'local'` so typing is undoable.
 
 Strokes and shapes store absolute canvas coordinates; their header `x, y, w, h` is the bounding box of the geometry and `rotation` is 0. Text boxes, images and clips have a frame (`x, y, w, h`) and a `rotation` around its centre.
 
@@ -58,7 +58,7 @@ The canvas UI lives in `src/ui/canvas/`: `engine/` is the imperative core (camer
 
 ## Sync
 
-Sync pulls on open, on returning to the foreground and every 20 seconds while the app is visible, and pushes about 20 seconds after the last change (at most 30 seconds after the first, so continuous work still goes out) and when the app goes to the background. A change therefore reaches another open device within 60 seconds (`worstCaseSyncDelayMs`). Yjs documents merge; JSON files merge field by field; derived files are regenerated, never merged. Commits touch only `journal/` and `library/`.
+Sync pulls on open, on returning to the foreground and every 20 seconds while the app is visible, and pushes about 20 seconds after the last change (at most 30 seconds after the first, so continuous work still goes out) and when the app goes to the background. A change therefore reaches another open device within 60 seconds (`worstCaseSyncDelayMs`). Changes of reading positions and pane state alone (P3) go out with the next push, when the app goes to the background, or after five minutes, so reading does not commit every half minute. A file GitHub refuses as too large is left out (with its clipping folder or its month's derived files), listed in the sync status and offered again a day later. Yjs documents merge; JSON files merge field by field; derived files are regenerated, never merged. Commits touch only `journal/` and `library/`.
 
 The engine is [`core/sync/engine.ts`](../src/core/sync/engine.ts) (`services.sync`); the GitHub API is [`git/github.ts`](../src/core/sync/git/github.ts), whose `commit` is the one place that writes and checks the write scope ([`scope.ts`](../src/core/sync/scope.ts)). A push is up to one commit per scope, library before journal, published with one ref update ([`commits.ts`](../src/core/sync/commits.ts)).
 
@@ -67,7 +67,7 @@ The engine is [`core/sync/engine.ts`](../src/core/sync/engine.ts) (`services.syn
 | `*.yjs` (segments, `todo.yjs`, annotations) | merged as CRDT updates; segments and annotations only if the device has them | the merged state, when GitHub lacks part of it |
 | `canvas.json`, `book.json`, `meta.json` | three-way merge per field against the last synced version (both changed: this device wins; never synced here: the repository wins; `topics` as sets; `segments` per month) | written when different |
 | `settings.json` | `mergeSettings`: reading positions and pane state by their own time, the rest newest-wins | written when different |
-| `clipping.md`, `snapshot.html`, assets | downloaded when opened | written once (content is immutable, L11); assets once per content hash |
+| `clipping.md`, `snapshot.html`, assets | downloaded when opened | written once (content is immutable, L11); assets once per content hash. `clipping.md` holds the content verbatim; the backslashes that neutralise its broken links (G9) are listed in its `escapes` front matter and removed on download |
 | derived (`days/`, `marks/`, `queue.md`, `todos.md`, READMEs, `annotations.md`) | ignored, except queue and to-do lines of segments not on the device | regenerated ([`derived/`](../src/core/sync/derived)) |
 | `formalized.md` | parsed into `services.formalized` | never written |
 
