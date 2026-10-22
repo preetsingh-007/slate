@@ -115,3 +115,49 @@ describe('pull with local changes in flight (R1, G9)', () => {
     expect(await a.library.clippingContent('c1')).toBeNull();
   });
 });
+
+describe('items replaced in a folder (R9, G9)', () => {
+  const meta = (id: string): ClippingMeta => ({ id, slug: '2026-10-21-notes', origin: 'clipboard', title: 'Notes', format: 'plain', added: 1, contentHash: id });
+
+  it('G9: a clipping deleted and re-created under the same name elsewhere is forgotten here, not moved aside', async () => {
+    const { repo, dev } = await setup();
+    const a = await dev('a');
+    const b = await dev('b');
+    await b.library.putClipping(meta('c1'), { markdown: 'first', assets: [] });
+    await b.sync.sync();
+    await a.sync.sync(); // a knows c1 (metadata only)
+    await b.library.deleteClipping('c1');
+    await b.sync.sync();
+    await b.library.putClipping(meta('c2'), { markdown: 'second', assets: [] });
+    await b.sync.sync();
+    await a.sync.sync();
+    expect(a.library.clippings().map((c) => `${c.id}@${c.slug}`)).toEqual(['c2@2026-10-21-notes']);
+    expect([...repo.files().keys()].filter((p) => p.startsWith('library/clippings/2026-10-21-notes-2'))).toEqual([]);
+    const check = runCheckPy(repo);
+    expect(check.ok, check.output).toBe(true);
+  });
+
+  it('G9: a clipping made here that clashes with a new one from another device is still moved aside', async () => {
+    const { repo, dev } = await setup();
+    const a = await dev('a');
+    const b = await dev('b');
+    await a.sync.sync();
+    await a.library.putClipping(meta('ca'), { markdown: 'from a', assets: [] });
+    await b.library.putClipping(meta('cb'), { markdown: 'from b', assets: [] });
+    await b.sync.sync();
+    await a.sync.sync();
+    expect(a.library.clippings().map((c) => `${c.id}@${c.slug}`).sort()).toEqual(['ca@2026-10-21-notes-2', 'cb@2026-10-21-notes']);
+    expect(repo.text('library/clippings/2026-10-21-notes-2/clipping.md')).toContain('from a');
+    expect(runCheckPy(repo).ok).toBe(true);
+  });
+
+  it('G9: a clipping whose content is not on this device is not pushed without clipping.md', async () => {
+    const { repo, dev } = await setup();
+    const a = await dev('a');
+    await a.sync.sync();
+    await a.library.putClipping(meta('c1'));
+    await a.sync.sync();
+    expect([...repo.files().keys()].filter((p) => p.startsWith('library/clippings/'))).toEqual([]);
+    expect(runCheckPy(repo).ok).toBe(true);
+  });
+});

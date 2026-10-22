@@ -117,9 +117,14 @@ async function pullLibrary(ctx: SyncContext, tree: Record<string, string>) {
     const local = items.find((x) => x.id === remote.id);
     const taken = (s: string) => items.some((x) => x.slug === s) || Object.keys(tree).some((p) => p.startsWith(`library/${isBook ? 'books' : 'clippings'}/${s}/`));
     if (!local) {
-      // another item created on this device took the same folder name: move ours aside
       const clash = items.find((x) => x.slug === slug && x.id !== remote.id);
-      if (clash) {
+      const baseId = (base as { id?: unknown } | undefined)?.id;
+      if (clash && clash.id === baseId) {
+        // the item this device last saw in the folder was deleted on another device, which then
+        // put a new one there (G9: moving it aside would push it without its content)
+        await ctx.quietly(() => library.forget(clash.id));
+      } else if (clash) {
+        // another item created on this device took the same folder name: move ours aside
         const moved = { ...clash, slug: freeSlug(slug, taken) };
         await ctx.quietly(() => (isBook ? library.putBook(moved as BookMeta) : library.putClipping(moved as ClippingMeta)));
       }

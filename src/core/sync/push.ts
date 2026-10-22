@@ -230,13 +230,20 @@ export async function push(ctx: SyncContext, opts: PushOptions = {}): Promise<Pu
     if (settings.get().lfs) await pushBookFile(ctx, plan, b);
   }
 
+  // G9: a clipping's folder needs its clipping.md: one whose content is neither in the repository
+  // nor on this device is not pushed
+  const clippings: ClippingMeta[] = [];
   for (const c of library.clippings()) {
     if (!CLIPPING_DIR.test(c.slug)) {
       ctx.warn(`The clipping "${c.title}" is not synced: its folder name "${c.slug}" is not valid.`);
       continue;
     }
+    if (!(await pushClippingContent(ctx, plan, c))) {
+      ctx.warn(`The clipping "${c.title}" is not synced: its content is not on this device.`);
+      continue;
+    }
+    clippings.push(c);
     await json(clippingMetaPath(c.slug), c);
-    await pushClippingContent(ctx, plan, c);
   }
 
   await json(SETTINGS_PATH, settings.get());
@@ -390,7 +397,7 @@ export async function push(ctx: SyncContext, opts: PushOptions = {}): Promise<Pu
     LIBRARY_README,
     libraryReadme(
       library.books().filter((b) => NAME.test(b.slug)),
-      library.clippings().filter((c) => CLIPPING_DIR.test(c.slug)),
+      clippings,
     ),
   );
 
@@ -496,12 +503,15 @@ async function dataUris(ctx: SyncContext, objects: readonly CanvasObject[]): Pro
   return out;
 }
 
-/** A clipping's content files, written once (L11): clipping.md, snapshot.html, assets/. */
-async function pushClippingContent(ctx: SyncContext, plan: PushPlan, c: ClippingMeta) {
+/**
+ * A clipping's content files, written once (L11): clipping.md, snapshot.html, assets/. False
+ * when the repository does not have them and this device cannot write them.
+ */
+async function pushClippingContent(ctx: SyncContext, plan: PushPlan, c: ClippingMeta): Promise<boolean> {
   const { st, deps } = ctx;
-  if (clippingMdPath(c.slug) in st.tree && !plan.deletes.has(clippingMdPath(c.slug))) return;
+  if (clippingMdPath(c.slug) in st.tree && !plan.deletes.has(clippingMdPath(c.slug))) return true;
   const content = await deps.library.clippingContent(c.id);
-  if (!content) return;
+  if (!content) return false;
   await plan.text(clippingMdPath(c.slug), clippingMarkdown(c, content.markdown));
   if (content.snapshotHtml) await plan.text(clippingSnapshotPath(c.slug), content.snapshotHtml);
   for (const a of content.assets) {
@@ -517,6 +527,7 @@ async function pushClippingContent(ctx: SyncContext, plan: PushPlan, c: Clipping
     }
     await plan.write(path, new Uint8Array(await blob.arrayBuffer()));
   }
+  return true;
 }
 
 /** Git LFS mode (R7): upload the book file, then commit its pointer. */
