@@ -16,6 +16,7 @@
  */
 import { parseSegmentDocId, annotationsDocId } from '../stores/docIds';
 import { Emitter } from '../util/emitter';
+import type { SyncedSettings } from '../model/types';
 import { GIT_TRANSPORT, type SyncContext, type SyncDeps } from './context';
 import { readSegment, type SegmentContent } from './derived/segment';
 import { parseClippingMarkdown } from './derived/library';
@@ -66,6 +67,12 @@ export interface SyncTimings {
   initialDelayMs: number;
   /** longest wait for an on-demand download before opening with what is local */
   ensureTimeoutMs: number;
+  /**
+   * P3: a change of reading positions or pane state only (scrolling a book) is pushed at most
+   * this long after it, or with the next push, or when the app goes to the background, so
+   * reading does not make a settings commit every half minute
+   */
+  positionsPushDelayMs: number;
 }
 
 /**
@@ -75,7 +82,7 @@ export interface SyncTimings {
  * time the push and the pull themselves take. Pulls are one cheap request (the branch head)
  * when nothing changed, so a 20 s interval stays far inside GitHub's rate limit.
  */
-export const DEFAULT_TIMINGS: SyncTimings = { pushDelayMs: 20_000, maxPushDelayMs: 30_000, pullIntervalMs: 20_000, initialDelayMs: 400, ensureTimeoutMs: 8_000 };
+export const DEFAULT_TIMINGS: SyncTimings = { pushDelayMs: 20_000, maxPushDelayMs: 30_000, pullIntervalMs: 20_000, initialDelayMs: 400, ensureTimeoutMs: 8_000, positionsPushDelayMs: 300_000 };
 
 /** Time a push and a pull may take on a slow connection, counted against the sync delay. */
 export const SYNC_RUN_ALLOWANCE_MS = 10_000;
@@ -84,8 +91,6 @@ export const SYNC_RUN_ALLOWANCE_MS = 10_000;
 export function worstCaseSyncDelayMs(t: SyncTimings = DEFAULT_TIMINGS): number {
   return Math.max(t.pushDelayMs, t.maxPushDelayMs) + t.pullIntervalMs + SYNC_RUN_ALLOWANCE_MS;
 }
-
-/** Documents edited in another tab are picked up by a full scan about this often. */
 
 const DAY = 24 * 60 * 60 * 1000;
 const MAX_ATTEMPTS = 4;
@@ -135,13 +140,16 @@ export class SyncEngine {
   private storesDirty = false;
   /** the first push after start scans every local document (changes made before this session) */
   private fullScan = true;
+  /** P3: reading positions or pane state changed here and are not pushed yet */
+  private positionsDirty = false;
+  private positionsTimer: ReturnType<typeof setTimeout> | undefined;
   private paused = false;
   private warnings: string[] = [];
   private meta: Meta = {};
   private segCache = new Map<string, SegmentContent>();
   private ensuring = new Map<string, Promise<void>>();
   private repoPaths: string[] = [];
-  private lastSettings: unknown;
+  private lastSettings: SyncedSettings;
   private bg: {
     timers: ReturnType<typeof setTimeout>[];
     interval: ReturnType<typeof setInterval>;
@@ -272,8 +280,12 @@ export class SyncEngine {
   private settingsChange(fromSync: boolean) {
     const synced = this.deps.settings.get();
     if (synced !== this.lastSettings) {
+      const before = this.lastSettings;
       this.lastSettings = synced;
-      if (!fromSync) this.storeChange();
+      if (!fromSync) {
+        if (onlyPositionsChanged(before, synced)) this.positionsChange();
+        else this.storeChange();
+      }
     }
     void this.configureFromSecrets();
     this.refreshStatus();
@@ -284,6 +296,16 @@ export class SyncEngine {
   private storeChange() {
     this.storesDirty = true;
     this.localChange();
+  }
+
+  /** P3: pushed with the next push, on going to the background, or after `positionsPushDelayMs`. */
+  private positionsChange() {
+    this.positionsDirty = true;
+    if (!this.bg || this.positionsTimer) return;
+    this.positionsTimer = setTimeout(() => {
+      this.positionsTimer = undefined;
+      if (this.positionsDirty) void this.sync();
+    }, this.timings.positionsPushDelayMs);
   }
 
   private localChange() {
@@ -301,7 +323,7 @@ export class SyncEngine {
 
   /** True when there are local changes GitHub does not have yet. */
   hasLocalChanges(): boolean {
-    return this.dirty.size > 0 || this.storesDirty || !!this.meta.unsyncedSince;
+    return this.dirty.size > 0 || this.storesDirty || this.positionsDirty || !!this.meta.unsyncedSince;
   }
 
   // ================================================================ status
@@ -424,13 +446,16 @@ export class SyncEngine {
             this.repoPaths = this.deps.mirror?.list().map((e) => e.path) ?? this.repoPaths;
             const dirtySnapshot = new Map(this.dirty);
             const storesWereDirty = this.storesDirty;
-            const needPush = pulled.changed || dirtySnapshot.size > 0 || storesWereDirty || this.fullScan || !!this.meta.unsyncedSince;
+            const positionsWereDirty = this.positionsDirty;
+            const needPush = pulled.changed || dirtySnapshot.size > 0 || storesWereDirty || positionsWereDirty || this.fullScan || !!this.meta.unsyncedSince;
             if (needPush) {
               this.storesDirty = false;
+              this.positionsDirty = false;
               try {
                 await push(ctx, { dirtyDocs: this.fullScan ? undefined : new Set(dirtySnapshot.keys()), repoPaths: this.repoPaths });
               } catch (err) {
                 this.storesDirty = this.storesDirty || storesWereDirty;
+                this.positionsDirty = this.positionsDirty || positionsWereDirty;
                 throw err;
               }
               this.fullScan = false;
@@ -530,6 +555,8 @@ export class SyncEngine {
     clearInterval(this.bg.interval);
     for (const t of this.bg.timers) clearTimeout(t);
     if (this.bg.pushTimer) clearTimeout(this.bg.pushTimer);
+    clearTimeout(this.positionsTimer);
+    this.positionsTimer = undefined;
     for (const f of this.bg.cleanup) f();
     this.bg = null;
   }
@@ -687,4 +714,10 @@ export function describeError(err: unknown): string {
   if (err instanceof GitRemoteError && err.retryAt) return `GitHub's rate limit was reached; sync resumes at ${new Date(err.retryAt).toLocaleTimeString()}.`;
   if (err instanceof TypeError) return 'Could not reach GitHub. Check the connection.';
   return String((err as Error)?.message ?? err);
+}
+
+/** P3: whether only reading positions and pane state differ between two versions of the settings. */
+function onlyPositionsChanged(a: SyncedSettings, b: SyncedSettings): boolean {
+  const rest = (s: SyncedSettings) => JSON.stringify({ ...s, readingPositions: undefined, panes: undefined });
+  return !!a && rest(a) === rest(b);
 }

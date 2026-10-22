@@ -21,6 +21,7 @@ import { FormalizedStore } from '../stores/formalized';
 import { DEFAULT_TIMINGS, SYNC_RUN_ALLOWANCE_MS, SyncEngine, worstCaseSyncDelayMs } from './engine';
 import { parseFrontMatter } from './derived/frontmatter';
 import { asSyncWrite } from '../stores/sharedKv';
+import { saveReadingPosition } from '../library/positions';
 
 beforeAll(useNodeBlob);
 
@@ -755,5 +756,36 @@ describe('change tracking around sync writes (R4)', () => {
     expect(a.sync.hasLocalChanges()).toBe(true);
     await a.sync.sync();
     expect(repo.text('library/books/mine/book.json')).toBeDefined();
+  });
+});
+
+describe('reading positions (P3, R4)', () => {
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const pos = (page: number) => ({ type: 'pdf' as const, page, region: { x: 0, y: 0, w: 1, h: 1 }, quote: '' });
+
+  it('P3: reading does not push settings every half minute; positions go out later, with other changes, or in the background', async () => {
+    const { repo, dev } = await setup();
+    const a = await dev('a', { timings: { pushDelayMs: 30, maxPushDelayMs: 60, pullIntervalMs: 60_000, initialDelayMs: 0, positionsPushDelayMs: 600 } });
+    a.sync.start();
+    for (let i = 0; i < 200 && a.sync.getStatus().phase !== 'synced'; i++) await wait(10);
+    const base = repo.log().length;
+    await saveReadingPosition(a.settings, 'b1', pos(3), 'a');
+    await wait(200);
+    expect(repo.log().length).toBe(base);
+    expect(a.sync.hasLocalChanges()).toBe(true); // so going to the background pushes it
+    expect(a.sync.getStatus().unsyncedSince).toBeUndefined();
+    for (let i = 0; i < 200 && repo.log().length === base; i++) await wait(10);
+    expect(JSON.parse(repo.text('library/settings.json')!).readingPositions.b1.locator.page).toBe(3);
+
+    // a content change still goes out within the push delay, carrying the latest position
+    const before = repo.log().length;
+    await saveReadingPosition(a.settings, 'b1', pos(4), 'a');
+    await a.settings.update({ colors: ['#abcdef'] });
+    for (let i = 0; i < 50 && repo.log().length === before; i++) await wait(10);
+    expect(repo.log().length).toBe(before + 1);
+    const settings = JSON.parse(repo.text('library/settings.json')!);
+    expect(settings.colors).toEqual(['#abcdef']);
+    expect(settings.readingPositions.b1.locator.page).toBe(4);
+    a.sync.stop();
   });
 });

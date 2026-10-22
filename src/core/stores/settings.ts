@@ -2,7 +2,7 @@
  * Settings (R11). Synced, non-secret settings live in `library/settings.json`; secrets (the
  * GitHub token, the fetch helper key) stay on this device only.
  */
-import type { SyncedSettings } from '../model/types';
+import type { ReadingPosition, SyncedSettings } from '../model/types';
 import type { SlateDB } from '../storage/idb';
 import { Emitter } from '../util/emitter';
 import { SharedKv, type StoreChange } from './sharedKv';
@@ -89,6 +89,14 @@ export class SettingsStore {
   async update(patch: Partial<SyncedSettings>, opts: { touch?: boolean } = {}): Promise<void> {
     const now = Date.now();
     await this.synced.mutate((s) => ({ ...s, ...patch, updated: opts.touch === false ? s.updated : now }));
+  }
+
+  /**
+   * P3: changes reading positions (they carry their own times, so `updated` stays), applied to
+   * the positions as stored, not to this tab's copy of them.
+   */
+  async updateReadingPositions(fn: (positions: Record<string, ReadingPosition>) => Record<string, ReadingPosition>): Promise<void> {
+    await this.synced.mutate((s) => ({ ...s, readingPositions: fn(s.readingPositions ?? {}) }));
   }
 
   /** Merges the repository's settings.json into the settings as they are now (from sync). */

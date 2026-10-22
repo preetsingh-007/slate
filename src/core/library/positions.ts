@@ -17,16 +17,19 @@ export function readingPosition(settings: SettingsStore, sourceId: string): Read
 export async function saveReadingPosition(settings: SettingsStore, sourceId: string, locator: PositionLocator, device: string, now = Date.now()): Promise<void> {
   const cur = settings.get().readingPositions ?? {};
   if (cur[sourceId] && JSON.stringify(cur[sourceId].locator) === JSON.stringify(locator)) return;
-  await settings.update({ readingPositions: { ...cur, [sourceId]: { sourceId, locator, updated: now, device } } }, { touch: false });
+  const pos = { sourceId, locator, updated: now, device };
+  await settings.updateReadingPositions((all) => ({ ...all, [sourceId]: pos }));
 }
 
 /** Removes the position of a deleted item. */
 export async function forgetReadingPosition(settings: SettingsStore, sourceId: string): Promise<void> {
   const cur = settings.get().readingPositions ?? {};
   if (!cur[sourceId]) return;
-  const next = { ...cur };
-  delete next[sourceId];
-  await settings.update({ readingPositions: next }, { touch: false });
+  await settings.updateReadingPositions((all) => {
+    const next = { ...all };
+    delete next[sourceId];
+    return next;
+  });
 }
 
 /** Reading-position id of a gym file in the gym reader (P3). */
