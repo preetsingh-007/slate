@@ -129,6 +129,7 @@ export class SyncEngine {
   private config: { token: string; repo: string; branch: string; apiBase: string } | null = null;
   private chain: Promise<unknown> = Promise.resolve();
   private running: Promise<void> | null = null;
+  private followUp: Promise<void> | null = null;
   private dirty = new Map<string, number>();
   private gen = 0;
   private storesDirty = false;
@@ -400,9 +401,20 @@ export class SyncEngine {
     return typeof navigator !== 'undefined' && navigator.onLine === false;
   }
 
-  /** Pull, merge, push; retried when another device pushed in between (R4). */
+  /**
+   * Pull, merge, push; retried when another device pushed in between (R4). Called while a run
+   * is under way, it waits for that run and then runs once more if changes were made meanwhile
+   * (the run only takes the changes present when it started), so "Sync now" always includes
+   * the latest edits.
+   */
   sync(): Promise<void> {
-    if (this.running) return this.running;
+    if (this.running) {
+      this.followUp ??= this.running.then(() => {
+        this.followUp = null;
+        return this.hasLocalChanges() ? this.sync() : undefined;
+      });
+      return this.followUp;
+    }
     const run = this.exclusive(async () => {
       await this.ready;
       if (!this.remote) return this.refreshStatus('off');

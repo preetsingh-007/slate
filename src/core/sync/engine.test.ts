@@ -600,6 +600,25 @@ describe('annotations (R2, R9)', () => {
   });
 });
 
+describe('sync while a run is under way', () => {
+  it('runs once more for changes made during the run, so Sync now includes them', async () => {
+    const { repo, dev } = await setup();
+    const a = await dev('a');
+    let second: Promise<void> | undefined;
+    // during the first run's push: a new text box, then "Sync now"
+    repo.beforeRefUpdate = async () => {
+      await a.draw([textBox('late', T(21), 'drawn while syncing')]);
+      second = a.sync.sync();
+    };
+    await a.sync.sync();
+    expect(second).toBeDefined();
+    await second;
+    const day = [...repo.files().entries()].find(([p]) => /^journal\/main\/2026-10\/days\/2026-10-21\.md$/.test(p));
+    expect(day && text(day[1])).toContain('drawn while syncing');
+    expect(a.sync.hasLocalChanges()).toBe(false);
+  });
+});
+
 describe('push timing (R4)', () => {
   it('a change reaches another online device within 60 s (sync delay NFR)', () => {
     // R4: push about 20 s after the last change
