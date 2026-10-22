@@ -6,10 +6,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownToLine, X } from 'lucide-react';
 import type { Capture } from '../../core/model/capture';
-import { useApp } from '../app/store';
+import { isNarrowScreen, useApp } from '../app/store';
 import { canvasApi } from '../common/registries';
-import { dropOnCanvas } from '../sources/send';
+import { canvasVisible, dropOnCanvas } from '../sources/send';
 import { toast } from '../common/toast';
+
+/** Placing from the tray while the side pane fills the screen: show the canvas, where they land (P2). */
+function showCanvas() {
+  if (canvasVisible()) return;
+  const app = useApp.getState();
+  app.setLayout(isNarrowScreen() ? 'canvas' : 'split');
+}
 
 export function CarryTray() {
   const carry = useApp((s) => s.carry);
@@ -24,6 +31,7 @@ export function CarryTray() {
           title="Place all below the latest content"
           aria-label="Place all captures on the canvas"
           onClick={async () => {
+            showCanvas();
             const api = canvasApi(useApp.getState().canvas);
             if (!api) return toast('Open the canvas to place captures.');
             const all = useApp.getState().carry;
@@ -58,6 +66,7 @@ function CarryItem({ capture }: { capture: Capture }) {
         aria-label={`Capture from ${capture.source.title}. Drag onto the canvas, or press Enter to place it.`}
         onKeyDown={async (e) => {
           if (e.key !== 'Enter') return;
+          showCanvas();
           const api = canvasApi(useApp.getState().canvas);
           if (!api) return;
           await api.insertCaptures([capture]);

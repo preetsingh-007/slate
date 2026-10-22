@@ -51,7 +51,8 @@ function validTab(t: unknown): t is PaneTab {
  */
 export function sanitizeLayout(l: Partial<PersistedLayout>, canvasExists: (slug: string) => boolean, fallbackCanvas = 'main'): Partial<PersistedLayout> {
   const out: Partial<PersistedLayout> = {};
-  const tabs = Array.isArray(l.tabs) ? l.tabs.filter(validTab).slice(0, MAX_TABS) : undefined;
+  // a canvas tab must name a canvas that exists: opening an unknown slug would start a new canvas
+  const tabs = Array.isArray(l.tabs) ? l.tabs.filter((t) => validTab(t) && (t.kind !== 'canvas' || canvasExists(t.slug))).slice(0, MAX_TABS) : undefined;
   if (tabs) out.tabs = tabs;
   if (typeof l.active === 'number' && Number.isFinite(l.active)) out.active = Math.max(0, Math.min(Math.round(l.active), Math.max(0, (tabs?.length ?? 1) - 1)));
   if (typeof l.divider === 'number' && Number.isFinite(l.divider)) out.divider = Math.min(0.85, Math.max(0.15, l.divider));

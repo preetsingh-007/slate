@@ -66,7 +66,7 @@ describe('pane state (P3)', () => {
 
   it('sanitizes a stored layout: known tabs only, active in range, divider bounded, an existing canvas', () => {
     const l = sanitizeLayout(
-      { tabs: [{ kind: 'book', id: 'b1' }, { kind: 'nope' } as never, { kind: 'gym', path: 'math' }], active: 7, divider: 3, canvas: 'gone', paneOpen: true, layout: 'pane' },
+      { tabs: [{ kind: 'book', id: 'b1' }, { kind: 'nope' } as never, { kind: 'canvas', slug: 'gone' }, { kind: 'gym', path: 'math' }], active: 7, divider: 3, canvas: 'gone', paneOpen: true, layout: 'pane' },
       (s) => s === 'main',
     );
     expect(l).toEqual({ tabs: [{ kind: 'book', id: 'b1' }, { kind: 'gym', path: 'math' }], active: 1, divider: 0.85, canvas: 'main', paneOpen: true, layout: 'pane' });
