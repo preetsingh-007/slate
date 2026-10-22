@@ -41,6 +41,12 @@ export class CanvasController implements ObjectLookup {
     return this.services.device;
   }
 
+  /** Writes pending changes now: segment bounds to the canvas index, documents to IndexedDB. */
+  flush() {
+    this.recordBounds.flush();
+    void this.services.docs.flush();
+  }
+
   dispose() {
     this.recordBounds.flush();
     for (const d of this.disposers) d();

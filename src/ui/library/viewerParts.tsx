@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { Copy, Highlighter, StickyNote, Trash2, X } from 'lucide-react';
 import { HIGHLIGHT_COLORS } from '../../core/library/annotations';
 import { LassoOverlay, type LassoMode, type LassoResult } from '../sources/LassoOverlay';
+import { usePageHide } from '../common/pageHide';
 
 /**
  * Hosts the lasso over the visible part of a scroll container (S1). It sits in a sticky,
@@ -132,6 +133,11 @@ export function NoteEditor({ anchor, initial, quote, onSave, onDelete, onClose }
   const [text, setText] = useState(initial);
   const area = useRef<HTMLTextAreaElement>(null);
   useEffect(() => area.current?.focus(), []);
+  // Durability NFR: a note being typed when the page goes away is kept (saving is idempotent:
+  // the annotation keeps its id)
+  usePageHide(() => {
+    if (text.trim() && text.trim() !== initial.trim()) onSave(text.trim());
+  });
   const save = () => {
     onSave(text.trim());
     onClose();

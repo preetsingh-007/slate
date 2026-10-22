@@ -33,6 +33,7 @@ import { Emitter } from '../../../core/util/emitter';
 import { compareZ } from '../../../core/util/zindex';
 import type { CanvasController } from '../controller';
 import { ERASER_PX, useTools, type Tool } from '../toolStore';
+import { onPageHide } from '../../common/pageHide';
 import { ctx2d, drawInk, makeCanvas } from './draw';
 import { TileLayer } from './tileLayer';
 
@@ -650,6 +651,22 @@ export class CanvasEngine {
     };
     on('touchstart', stylus);
     on('touchmove', stylus);
+    // Durability NFR: the tab may close or the app be suspended with the pen still down
+    this.cleanup.push(onPageHide(() => this.saveInProgress()));
+  }
+
+  /**
+   * Commits the stroke being drawn (as far as it got) and writes everything to disk. Called when
+   * the page is hidden; the rest of the stroke's pointer events, if any, are ignored.
+   */
+  saveInProgress() {
+    const g = this.gesture;
+    if (g?.kind === 'draw') {
+      this.gesture = null;
+      g.predicted = [];
+      this.commitStroke(g);
+    }
+    this.ctl.flush();
   }
 
   private interactiveTarget(e: PointerEvent): boolean {

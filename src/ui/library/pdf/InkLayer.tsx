@@ -11,6 +11,7 @@ import { memo, useEffect, useRef } from 'react';
 import type { Annotation, StrokeTool } from '../../../core/model/types';
 import { HIGHLIGHTER_ALPHA, resolveInkColor, strokeToPath2D } from '../../../core/ink/render';
 import { PointSmoother, PressureSimulator } from '../../../core/ink/smoothing';
+import { usePageHide } from '../../common/pageHide';
 
 export interface InkStyle {
   tool: StrokeTool;
@@ -120,6 +121,22 @@ export const InkLayer = memo(function InkLayer({ width, height, annotations, mod
 
   const accepts = (e: React.PointerEvent) => e.pointerType !== 'touch' || fingerDrawing;
 
+  /** Ends a stroke: clears the wet layer and stores the ink drawn so far. */
+  const finish = (d: NonNullable<typeof drawing.current>) => {
+    drawing.current = null;
+    const c = wet.current;
+    c?.getContext('2d')?.clearRect(0, 0, c.width, c.height);
+    if (mode !== 'draw' || d.pts.length < 3) return;
+    // page-normalised: x and y in units of the page width
+    const norm: number[] = [];
+    for (let i = 0; i + 2 < d.pts.length; i += 3) norm.push(round(d.pts[i] / width), round(d.pts[i + 1] / width), Math.round(d.pts[i + 2] * 100) / 100);
+    onStroke(norm);
+  };
+  // Durability NFR: a stroke still being drawn when the page goes away is kept
+  usePageHide(() => {
+    if (drawing.current) finish(drawing.current);
+  });
+
   if (!mode) {
     return <canvas ref={canvas} className="pdf-ink" style={{ width, height }} aria-hidden />;
   }
@@ -172,14 +189,7 @@ export const InkLayer = memo(function InkLayer({ width, height, annotations, mod
         onPointerUp={(e) => {
           const d = drawing.current;
           if (!d || d.id !== e.pointerId) return;
-          drawing.current = null;
-          const c = wet.current;
-          c?.getContext('2d')?.clearRect(0, 0, c.width, c.height);
-          if (mode !== 'draw' || d.pts.length < 3) return;
-          // page-normalised: x and y in units of the page width
-          const norm: number[] = [];
-          for (let i = 0; i + 2 < d.pts.length; i += 3) norm.push(round(d.pts[i] / width), round(d.pts[i + 1] / width), Math.round(d.pts[i + 2] * 100) / 100);
-          onStroke(norm);
+          finish(d);
         }}
         onPointerCancel={() => {
           drawing.current = null;
