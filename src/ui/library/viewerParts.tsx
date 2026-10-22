@@ -131,7 +131,24 @@ export function HighlightMenu({ anchor, onColor, onNote, onRemove, onClose }: { 
 }
 
 /** Margin note editor (L4, L5, L11). */
-export function NoteEditor({ anchor, initial, quote, onSave, onDelete, onClose }: { anchor: DOMRect; initial: string; quote?: string; onSave(text: string): void; onDelete?(): void; onClose(): void }) {
+export function NoteEditor({
+  anchor,
+  initial,
+  quote,
+  onSave,
+  onDelete,
+  onDiscard,
+  onClose,
+}: {
+  anchor: DOMRect;
+  initial: string;
+  quote?: string;
+  onSave(text: string): void;
+  onDelete?(): void;
+  /** Cancel on a new note: removes what was saved while typing */
+  onDiscard?(): void;
+  onClose(): void;
+}) {
   const [text, setText] = useState(initial);
   const area = useRef<HTMLTextAreaElement>(null);
   useEffect(() => area.current?.focus(), []);
@@ -140,6 +157,19 @@ export function NoteEditor({ anchor, initial, quote, onSave, onDelete, onClose }
   usePageHide(() => {
     if (text.trim() && text.trim() !== initial.trim()) onSave(text.trim());
   });
+  // and saved while typing, so keeping it never depends on winning the race at page close
+  const saved = useRef(initial.trim());
+  const latestSave = useRef(onSave);
+  latestSave.current = onSave;
+  useEffect(() => {
+    const t = text.trim();
+    if (!t || t === saved.current) return;
+    const timer = setTimeout(() => {
+      saved.current = t;
+      latestSave.current(t);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [text]);
   const save = () => {
     onSave(text.trim());
     onClose();
@@ -172,7 +202,15 @@ export function NoteEditor({ anchor, initial, quote, onSave, onDelete, onClose }
             </button>
           )}
           <span style={{ flex: 1 }} />
-          <button className="btn" onClick={onClose} aria-label="Cancel">
+          <button
+            className="btn"
+            onClick={() => {
+              // a new note was saved while typing; Cancel means it should not exist
+              if (onDiscard && saved.current !== initial.trim()) onDiscard();
+              onClose();
+            }}
+            aria-label="Cancel"
+          >
             <X size={14} />
           </button>
           <button className="btn primary" onClick={save}>

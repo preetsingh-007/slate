@@ -546,6 +546,7 @@ export function EpubViewer({ book: meta, onMissing }: { book: BookMeta; onMissin
             putAnnotation(annDoc, { ...noteEdit.a, text });
           }}
           onDelete={noteEdit.isNew ? undefined : () => annDoc && removeAnnotation(annDoc, noteEdit.a.id)}
+          onDiscard={noteEdit.isNew ? () => annDoc && removeAnnotation(annDoc, noteEdit.a.id) : undefined}
         />
       )}
     </div>

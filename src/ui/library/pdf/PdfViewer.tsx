@@ -369,11 +369,10 @@ export function PdfViewer({ book, onMissing }: { book: BookMeta; onMissing(): vo
   const onErase = useCallback((ids: string[]) => annDoc && ids.forEach((id) => removeAnnotation(annDoc, id)), [annDoc]);
   const onNoteAt = useCallback(
     (pageN: number, x: number, y: number, anchor: DOMRect) => {
-      if (!annDoc) return;
       const a = newAnnotation('note', { type: 'pdf', page: pageN, region: { x, y, w: 0, h: 0 }, quote: '' }, { text: '', color: HIGHLIGHT_COLORS[0].value });
       setNoteEdit({ a, anchor, isNew: true });
     },
-    [annDoc],
+    [],
   );
   const onOpenNote = useCallback((a: Annotation, anchor: DOMRect) => setNoteEdit({ a, anchor, isNew: false }), []);
   const onHighlightClick = useCallback((a: Annotation, anchor: DOMRect) => setHlMenu({ a, anchor }), []);
@@ -687,11 +686,11 @@ export function PdfViewer({ book, onMissing }: { book: BookMeta; onMissing(): vo
           quote={noteEdit.a.locator.type === 'pdf' ? noteEdit.a.locator.quote : undefined}
           onClose={() => setNoteEdit(null)}
           onSave={(text) => {
-            if (!annDoc) return;
             if (!text && noteEdit.isNew) return;
-            putAnnotation(annDoc, { ...noteEdit.a, text });
+            saveAnnotation({ ...noteEdit.a, text });
           }}
           onDelete={noteEdit.isNew ? undefined : () => annDoc && removeAnnotation(annDoc, noteEdit.a.id)}
+          onDiscard={noteEdit.isNew ? () => annDoc && removeAnnotation(annDoc, noteEdit.a.id) : undefined}
         />
       )}
     </div>

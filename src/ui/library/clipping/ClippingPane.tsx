@@ -647,6 +647,7 @@ function ClippingView({ meta, content }: { meta: ClippingMeta; content: Clipping
             putAnnotation(annDoc, { ...noteEdit.a, text });
           }}
           onDelete={noteEdit.isNew ? undefined : () => annDoc && removeAnnotation(annDoc, noteEdit.a.id)}
+          onDiscard={noteEdit.isNew ? () => annDoc && removeAnnotation(annDoc, noteEdit.a.id) : undefined}
         />
       )}
       {markList && <ClipList clips={markList.clips} anchor={markList.anchor} onClose={() => setMarkList(null)} />}
