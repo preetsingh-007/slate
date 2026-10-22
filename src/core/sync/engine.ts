@@ -30,7 +30,7 @@ import type { SnapshotAsset } from '../stores/library';
 import { mimeFor } from '../storage/assets';
 import { bookFilePath, clippingAnnotationsPath, clippingDir, clippingMdPath, clippingSnapshotPath, segmentPath } from './paths';
 import { BranchNotFoundError, fetchSegmentAssets, mergeDoc, pull } from './pull';
-import { push } from './push';
+import { push, refusedMessage, refusedRetryDue } from './push';
 import { emptyState, loadState, saveState, stateKey, type SyncState } from './state';
 import { WriteScopeError } from './scope';
 
@@ -447,7 +447,7 @@ export class SyncEngine {
             const dirtySnapshot = new Map(this.dirty);
             const storesWereDirty = this.storesDirty;
             const positionsWereDirty = this.positionsDirty;
-            const needPush = pulled.changed || dirtySnapshot.size > 0 || storesWereDirty || positionsWereDirty || this.fullScan || !!this.meta.unsyncedSince;
+            const needPush = pulled.changed || dirtySnapshot.size > 0 || storesWereDirty || positionsWereDirty || this.fullScan || !!this.meta.unsyncedSince || refusedRetryDue(st, this.now());
             if (needPush) {
               this.storesDirty = false;
               this.positionsDirty = false;
@@ -467,6 +467,8 @@ export class SyncEngine {
             throw err;
           }
         }
+        // R7: files GitHub refused stay in the status until they are pushed or gone
+        for (const path of Object.keys(st.rejected ?? {}).sort()) if (!this.warnings.includes(refusedMessage(path))) this.warnings.push(refusedMessage(path));
         this.meta.lastSyncedAt = this.now();
         if (!this.dirty.size && !this.storesDirty) this.meta.unsyncedSince = undefined;
         await this.saveMeta();

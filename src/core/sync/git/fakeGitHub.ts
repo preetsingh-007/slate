@@ -73,6 +73,8 @@ export class FakeRepo {
   beforeRefUpdate: (() => Promise<void> | void) | undefined;
   /** reject this many ref updates as non-fast-forward regardless of state */
   rejectRefUpdates = 0;
+  /** blobs larger than this are refused like GitHub refuses oversized input (422) */
+  maxBlobBytes = Infinity;
   refUpdates = 0;
   conflicts = 0;
   blobsCreated = 0;
@@ -317,6 +319,7 @@ export class FakeGitHub {
     }
     if (method === 'POST' && rest === '/git/blobs') {
       const content = body.encoding === 'base64' ? fromBase64(String(body.content)) : enc.encode(String(body.content));
+      if (content.length > repo.maxBlobBytes) return json(422, { message: 'Sorry, your input was too large to process. Consider creating the blob in smaller chunks.' }, extra);
       repo.blobsCreated++;
       return ok({ sha: await repo.putBlob(content) }, 201);
     }

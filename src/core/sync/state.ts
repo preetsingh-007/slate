@@ -30,6 +30,8 @@ export interface SyncState {
   derivedVersion: number;
   /** signature of the library and canvas index the derived files were generated with */
   indexSig: string;
+  /** R7: path → the content (blob sha) GitHub refused as too large, and when; not sent again for a day */
+  rejected: Record<string, { sha: string; at: number }>;
 }
 
 export const emptyState = (): SyncState => ({
@@ -44,6 +46,7 @@ export const emptyState = (): SyncState => ({
   texts: {},
   derivedVersion: 0,
   indexSig: '',
+  rejected: {},
 });
 
 export const stateKey = (remoteId: string) => `sync:state:${remoteId}`;

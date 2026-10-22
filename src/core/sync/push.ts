@@ -28,7 +28,7 @@ import { neutralizeLinks, pathExists } from './derived/links';
 import { parseQueue, parseTodos, queueMarkdown, todosMarkdown, uncheckedTasks, type CanvasTodo, type QueueEntry } from './derived/lists';
 import { markMarkdown, markPngSize, markSvg, type MarkObject } from './derived/marks';
 import { dayOf, segmentAssets, type DerivedEnv, type SegmentContent } from './derived/segment';
-import { bytesToBase64, gitBlobSha } from './git/remote';
+import { RemoteFileTooLargeError, bytesToBase64, gitBlobSha } from './git/remote';
 import { canvasFile, jsonBytes } from './json';
 import { lfsPointer } from './lfs';
 import { compactState, containedIn, isEmptyUpdate, pathForDoc, withDoc } from './local';
@@ -68,14 +68,23 @@ const TRANSPARENT_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABC
 export class PushPlan {
   readonly writes = new Map<string, { content: Uint8Array; sha: string }>();
   readonly deletes = new Set<string>();
+  /** R7: writes left out because GitHub refused these bytes as too large */
+  readonly skipped = new Set<string>();
 
-  constructor(private tree: Record<string, string>) {}
+  constructor(
+    private tree: Record<string, string>,
+    private refused: (path: string, sha: string) => boolean = () => false,
+  ) {}
 
   /** Plans a write; a no-op when the repository already has these bytes. */
   async write(path: string, content: Uint8Array): Promise<string> {
     const sha = await gitBlobSha(content);
     this.deletes.delete(path);
-    if (this.tree[path] === sha) this.writes.delete(path);
+    this.skipped.delete(path);
+    if (this.refused(path, sha)) {
+      this.writes.delete(path);
+      this.skipped.add(path);
+    } else if (this.tree[path] === sha) this.writes.delete(path);
     else this.writes.set(path, { content, sha });
     return sha;
   }
@@ -135,11 +144,51 @@ export function indexSignature(ctx: SyncContext): string {
   );
 }
 
+/** R7: how long a file GitHub refused as too large is left out before it is offered again. */
+const REFUSED_RETRY_MS = 24 * 60 * 60 * 1000;
+
+/** R7: the sync status line for a file GitHub refused as too large. */
+export const refusedMessage = (path: string) => `${path} is too large for GitHub and is not synced.`;
+
+/** R7: whether a refused file is due to be offered to GitHub again. */
+export function refusedRetryDue(st: { rejected?: Record<string, { at: number }> }, now: number): boolean {
+  return Object.values(st.rejected ?? {}).some((r) => now - r.at >= REFUSED_RETRY_MS);
+}
+
 export async function push(ctx: SyncContext, opts: PushOptions = {}): Promise<PushResult> {
+  const now = (ctx.deps.now ?? Date.now)();
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await pushOnce(ctx, opts, now);
+    } catch (err) {
+      // R7: one file GitHub will not take must not stop everything else: leave it out, say
+      // so in the sync status, and push the rest
+      const plan = err instanceof RefusedFile ? err : null;
+      if (!plan || attempt >= 20) throw plan ? plan.cause : err;
+      ctx.st.rejected[plan.path] = { sha: plan.sha, at: now };
+    }
+  }
+}
+
+class RefusedFile extends Error {
+  constructor(
+    readonly path: string,
+    readonly sha: string,
+    readonly cause: RemoteFileTooLargeError,
+  ) {
+    super(cause.message);
+  }
+}
+
+async function pushOnce(ctx: SyncContext, opts: PushOptions, now: number): Promise<PushResult> {
   const { deps, st, remote } = ctx;
   const { docs, library, canvases, settings, assets } = deps;
   if (!st.head) throw new Error('push before the first pull');
-  const plan = new PushPlan(st.tree);
+  st.rejected ??= {};
+  const plan = new PushPlan(st.tree, (path, sha) => {
+    const r = st.rejected[path];
+    return !!r && r.sha === sha && now - r.at < REFUSED_RETRY_MS;
+  });
   const jsonOut = new Map<string, unknown>();
   const docOut = new Map<string, { docId: string; digest: string }>();
   const pngOut = new Map<string, { svg: string; sha: string }>();
@@ -199,7 +248,7 @@ export async function push(ctx: SyncContext, opts: PushOptions = {}): Promise<Pu
     if (remoteSha && containedIn(state, st.digest[docId])) continue;
     const content = compactState(state);
     await plan.write(path, content);
-    docOut.set(path, { docId, digest: stateDigest(content) });
+    if (!plan.skipped.has(path)) docOut.set(path, { docId, digest: stateDigest(content) });
   }
 
   // assets of segments (R7): uploaded once, named by content hash
@@ -238,8 +287,9 @@ export async function push(ctx: SyncContext, opts: PushOptions = {}): Promise<Pu
       ctx.warn(`The clipping "${c.title}" is not synced: its folder name "${c.slug}" is not valid.`);
       continue;
     }
-    if (!(await pushClippingContent(ctx, plan, c))) {
-      ctx.warn(`The clipping "${c.title}" is not synced: its content is not on this device.`);
+    const pushed = await pushClippingContent(ctx, plan, c);
+    if (pushed !== 'ok') {
+      if (pushed === 'missing') ctx.warn(`The clipping "${c.title}" is not synced: its content is not on this device.`);
       continue;
     }
     clippings.push(c);
@@ -250,7 +300,8 @@ export async function push(ctx: SyncContext, opts: PushOptions = {}): Promise<Pu
 
   // ---------------------------------------------------------------- 2. derived files
 
-  const segIds = [...localIds].filter((id) => parseSegmentDocId(id) && pathForDoc(id, library));
+  // a segment whose canvas.yjs is not in the repository (refused as too large) gets no derived files
+  const segIds = [...localIds].filter((id) => parseSegmentDocId(id) && pathForDoc(id, library) && plan.has(pathForDoc(id, library)!));
   const contents = new Map<string, SegmentContent>();
   for (const id of segIds) {
     const c = await ctx.segment(id);
@@ -422,10 +473,15 @@ export async function push(ctx: SyncContext, opts: PushOptions = {}): Promise<Pu
     if (safe !== text) await plan.text(path, safe);
   }
 
+  // refusals of files this push no longer has, or offers again, are forgotten
+  for (const path of Object.keys(st.rejected)) if (!plan.skipped.has(path)) delete st.rejected[path];
+  for (const path of [...plan.skipped].sort()) ctx.warn(refusedMessage(path));
+
   const changes = plan.changes();
   const finish = async (head: string | null) => {
     if (head) st.head = head;
     for (const c of changes) {
+      delete st.rejected[c.path];
       if (c.content) st.tree[c.path] = plan.writes.get(c.path)!.sha;
       else {
         delete st.tree[c.path];
@@ -460,7 +516,14 @@ export async function push(ctx: SyncContext, opts: PushOptions = {}): Promise<Pu
     return { committed: false, messages: [], head: st.head, pushedDocs };
   }
   const commits = planCommits(changes);
-  const head = await remote.commit(commits, st.head);
+  let head: Awaited<ReturnType<typeof remote.commit>>;
+  try {
+    head = await remote.commit(commits, st.head);
+  } catch (err) {
+    const w = err instanceof RemoteFileTooLargeError ? plan.writes.get(err.path) : undefined;
+    if (w) throw new RefusedFile((err as RemoteFileTooLargeError).path, w.sha, err as RemoteFileTooLargeError);
+    throw err;
+  }
   await finish(head.commitSha);
   return { committed: true, messages: commits.map((c) => c.message), head: head.commitSha, pushedDocs };
 }
@@ -505,15 +568,17 @@ async function dataUris(ctx: SyncContext, objects: readonly CanvasObject[]): Pro
 }
 
 /**
- * A clipping's content files, written once (L11): clipping.md, snapshot.html, assets/. False
- * when the repository does not have them and this device cannot write them.
+ * A clipping's content files, written once (L11): clipping.md, snapshot.html, assets/. Not 'ok'
+ * when the repository does not have them and this device cannot write them: the content is not
+ * here ('missing') or GitHub refused clipping.md as too large ('refused', R7).
  */
-async function pushClippingContent(ctx: SyncContext, plan: PushPlan, c: ClippingMeta): Promise<boolean> {
+async function pushClippingContent(ctx: SyncContext, plan: PushPlan, c: ClippingMeta): Promise<'ok' | 'missing' | 'refused'> {
   const { st, deps } = ctx;
-  if (clippingMdPath(c.slug) in st.tree && !plan.deletes.has(clippingMdPath(c.slug))) return true;
+  if (clippingMdPath(c.slug) in st.tree && !plan.deletes.has(clippingMdPath(c.slug))) return 'ok';
   const content = await deps.library.clippingContent(c.id);
-  if (!content) return false;
+  if (!content) return 'missing';
   await plan.text(clippingMdPath(c.slug), clippingMarkdown(c, content.markdown));
+  if (plan.skipped.has(clippingMdPath(c.slug))) return 'refused';
   if (content.snapshotHtml) await plan.text(clippingSnapshotPath(c.slug), content.snapshotHtml);
   for (const a of content.assets) {
     const name = a.path.split('/').pop() ?? '';
@@ -528,7 +593,7 @@ async function pushClippingContent(ctx: SyncContext, plan: PushPlan, c: Clipping
     }
     await plan.write(path, new Uint8Array(await blob.arrayBuffer()));
   }
-  return true;
+  return 'ok';
 }
 
 /** Git LFS mode (R7): upload the book file, then commit its pointer. */

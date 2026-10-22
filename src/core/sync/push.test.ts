@@ -130,3 +130,58 @@ describe("Python's line semantics in generated Markdown (G9)", () => {
     expect(check.ok, check.output).toBe(true);
   });
 });
+
+describe('files GitHub refuses as too large (R7)', () => {
+  it('R7: one oversized file is reported and skipped; everything else is pushed, and later pushes go on', async () => {
+    const gh = new FakeGitHub();
+    const repo = await gh.createRepo('me/gym', { tokens: ['tok'], files: { 'README.md': '# gym\n' } });
+    let now = Date.now();
+    const a = await device(gh, 'a', { now: () => now });
+    devices.push(a);
+    await a.sync.sync();
+    repo.maxBlobBytes = 2000;
+    const big = 'x'.repeat(5000);
+    const meta: ClippingMeta = { id: 'c1', slug: '2026-10-21-big', origin: 'clipboard', title: 'Big', format: 'plain', added: 1, contentHash: 'h' };
+    await a.library.putClipping(meta, { markdown: big, assets: [] });
+    await a.library.putBook(book('b1'));
+    await a.sync.sync();
+    const status = a.sync.getStatus();
+    expect(status.phase).toBe('synced');
+    expect(status.warnings.join('\n')).toContain('library/clippings/2026-10-21-big/clipping.md');
+    expect(repo.text('library/books/sicp/book.json')).toBeDefined();
+    // the clipping's folder is not left without its clipping.md (G9)
+    expect([...repo.files().keys()].filter((p) => p.startsWith('library/clippings/'))).toEqual([]);
+    expect(runCheckPy(repo).ok).toBe(true);
+    // later changes still go out, and the file is still reported
+    await a.library.putBook({ ...book('b1'), title: 'SICP 2nd ed.' });
+    await a.sync.sync();
+    expect(JSON.parse(repo.text('library/books/sicp/book.json')!).title).toBe('SICP 2nd ed.');
+    expect(a.sync.getStatus().warnings.join('\n')).toContain('2026-10-21-big/clipping.md');
+    // it is offered again a day later, and pushed once GitHub accepts it
+    repo.maxBlobBytes = Infinity;
+    await a.sync.sync();
+    expect(repo.text('library/clippings/2026-10-21-big/clipping.md')).toBeUndefined();
+    now += 25 * 60 * 60 * 1000;
+    await a.sync.sync();
+    expect(repo.text('library/clippings/2026-10-21-big/clipping.md')).toContain(big);
+    expect(a.sync.getStatus().warnings).toEqual([]);
+  });
+
+  it('R7: a canvas month GitHub refuses gets no derived files, so the repository stays valid (G9)', async () => {
+    const { repo, dev } = await setup();
+    const a = await dev('a');
+    await a.sync.sync();
+    repo.maxBlobBytes = 3000;
+    const T = new Date(2026, 9, 21, 10).getTime();
+    await a.draw([textBox('big', T, 'word '.repeat(1000) + '\n\n- [ ] a task')], [mark('m1', T + 1000, 'note', ['big'])]);
+    await a.draw([textBox('small', new Date(2026, 8, 30, 10).getTime(), 'September')]);
+    await a.sync.sync();
+    expect(a.sync.getStatus().phase).toBe('synced');
+    expect(a.sync.getStatus().warnings.join('\n')).toContain('journal/main/2026-10/canvas.yjs');
+    const paths = [...repo.files().keys()];
+    expect(paths.filter((p) => p.startsWith('journal/main/2026-10/'))).toEqual([]);
+    expect(paths).toContain('journal/main/2026-09/canvas.yjs');
+    const check = runCheckPy(repo);
+    expect(check.ok, check.output).toBe(true);
+  });
+});
