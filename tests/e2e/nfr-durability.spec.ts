@@ -24,6 +24,9 @@ const storedBytes = (page: Page, docId: string) =>
 /** Closes the tab the way a person does (pagehide runs, nothing else), and opens a fresh one. */
 async function closeAndReopen(page: Page, context: BrowserContext): Promise<Page> {
   await page.close();
+  // a person reopens the app after a moment; reopening within milliseconds can read the
+  // database before the closed page's last transaction has committed
+  await new Promise((r) => setTimeout(r, 1000));
   const next = await context.newPage();
   await openApp(next);
   await next.locator('.cv-view[data-canvas="main"][data-ready="true"]').waitFor();

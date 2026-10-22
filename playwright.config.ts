@@ -9,8 +9,8 @@ const appPort = Number(process.env.SLATE_E2E_APP_PORT ?? 4173);
 const apiPort = Number(process.env.SLATE_E2E_API_PORT ?? 4455);
 process.env.SLATE_E2E_API = `http://localhost:${apiPort}`;
 
-/** Timing budgets: run in their own project, after the others. */
-const PERF = /(canvas-perf|nfr-perf)\.spec\.ts$/;
+/** Timing budgets and the close-the-tab durability tests: run in their own project, after the others. */
+const PERF = /(canvas-perf|nfr-perf|nfr-durability)\.spec\.ts$/;
 
 export default defineConfig({
   testDir: 'tests/e2e',
