@@ -144,6 +144,100 @@ describe('CanvasModel', () => {
   });
 });
 
+describe('CanvasModel across a month boundary (W1)', () => {
+  const OCT31 = new Date(2026, 9, 31, 23, 59).getTime();
+  const NOV1 = new Date(2026, 10, 1, 0, 1).getTime();
+
+  /** a source whose months open only when the test lets them */
+  function gatedSource() {
+    const inner = memorySource();
+    const gates = new Map<string, () => void>();
+    return {
+      docs: inner.docs,
+      opened: [] as string[],
+      release: (month: string) => gates.get(month)?.(),
+      open(month: string) {
+        this.opened.push(month);
+        if (month !== '2026-11') return inner.open(month);
+        return new Promise<Y.Doc>((resolve) => gates.set(month, () => void inner.open(month).then(resolve)));
+      },
+    };
+  }
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  it('W1: a stroke and day line made after midnight wait for the new month instead of being dropped, as one undo step', async () => {
+    let now = OCT31;
+    const src = gatedSource();
+    const m = new CanvasModel('main', src, 'd1', () => now);
+    await m.load(['2026-10']);
+    m.transact((tx) => tx.add(stroke('a', now)));
+    now = NOV1;
+    expect(() =>
+      m.transact((tx) => {
+        tx.add(stroke('b', now, 0, 100));
+        tx.setDay('2026-11-01', 76);
+      }),
+    ).not.toThrow();
+    // shown at once, and the month is being loaded
+    expect(m.get('b')).toBeDefined();
+    expect(m.dayLines().get('2026-11-01')).toBe(76);
+    expect(m.query({ x: -5, y: 95, w: 50, h: 50 }).map((o) => o.id)).toEqual(['b']);
+    expect(src.opened).toContain('2026-11');
+    // more work before the month opens: an edit of the waiting stroke and a second stroke
+    m.transact((tx) => tx.update('b', { color: '#ff0000' }));
+    m.transact((tx) => tx.add(stroke('c', now, 0, 200)));
+    expect((m.get('b') as StrokeObject).color).toBe('#ff0000');
+    src.release('2026-11');
+    await flush();
+    const nov = src.docs.get('2026-11')!;
+    expect([...nov.getMap('objects').keys()].sort()).toEqual(['b', 'c']);
+    expect(m.monthOf('b')).toBe('2026-11');
+    expect((m.get('b') as StrokeObject).color).toBe('#ff0000');
+    expect(m.dayLines().get('2026-11-01')).toBe(76);
+    // one undo step per action, as if the month had been loaded
+    m.undo();
+    expect(m.has('c')).toBe(false);
+    m.undo();
+    expect((m.get('b') as StrokeObject).color).toBe('#000000');
+    m.undo();
+    expect(m.has('b')).toBe(false);
+    expect(m.dayLines().has('2026-11-01')).toBe(false);
+    expect(m.has('a')).toBe(true);
+    m.redo();
+    expect(m.has('b')).toBe(true);
+    expect(m.dayLines().get('2026-11-01')).toBe(76);
+  });
+
+  it('W1: undoing an action that is still waiting withdraws it; redo queues it again', async () => {
+    let now = OCT31;
+    const src = gatedSource();
+    const m = new CanvasModel('main', src, 'd1', () => now);
+    await m.load(['2026-10']);
+    now = NOV1;
+    m.transact((tx) => {
+      tx.add(stroke('b', now));
+      tx.add(stroke('old', OCT31, 0, 50));
+    });
+    expect(m.undo()).toBe(true);
+    expect(m.has('b')).toBe(false);
+    expect(m.has('old')).toBe(false);
+    expect(m.redo()).toBe(true);
+    expect(m.has('b')).toBe(true);
+    expect(m.has('old')).toBe(true);
+    m.transact((tx) => tx.add(stroke('c', now)));
+    m.undo();
+    src.release('2026-11');
+    await flush();
+    expect([...src.docs.get('2026-11')!.getMap('objects').keys()]).toEqual(['b']);
+    expect(m.has('c')).toBe(false);
+    m.redo();
+    expect([...src.docs.get('2026-11')!.getMap('objects').keys()].sort()).toEqual(['b', 'c']);
+    m.undo();
+    m.undo();
+    expect(m.count).toBe(0);
+  });
+});
+
 describe('zindex', () => {
   it('generates keys between any two keys', () => {
     const keys = [keyAfter(null)];

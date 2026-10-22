@@ -6,6 +6,10 @@
  * - All writes go through `transact`, which routes each operation to the segment that owns
  *   it (an object's creation month) and records one undo step for the whole action, even
  *   when it touches several segments (C17).
+ * - W1: a write to a month that is not loaded yet (the first stroke after midnight on the 1st,
+ *   before the new month's document has opened) is never dropped: its operations wait for the
+ *   month to load and are applied then, as part of the same undo step. Until then they show
+ *   in the caches (objects, marks, day lines), so the surface looks the same either way.
  */
 import * as Y from 'yjs';
 import type { CanvasObject, Mark, Rect } from '../model/types';
@@ -84,6 +88,18 @@ interface Segment {
   dispose: () => void;
 }
 
+/** W1: the operations of one action on a month that was not loaded when it was made. */
+interface Queued {
+  month: string;
+  ops: Op[];
+  touch: boolean;
+  t: number;
+  undoable: boolean;
+  /** the undo step this belongs to (its month is added when the operations are applied) */
+  entry: string[] | null;
+  state: 'queued' | 'cancelled' | 'applied';
+}
+
 export class CanvasModel {
   readonly onChange = new Emitter<CanvasChange>();
   readonly index = new SpatialIndex();
@@ -98,6 +114,13 @@ export class CanvasModel {
   private replaying = false;
   private zMax: string | null = null;
   private zMin: string | null = null;
+  /** W1: actions waiting for their month to load, in order, per month */
+  private queued = new Map<string, Queued[]>();
+  /** W1: undo steps with parts waiting for a month to load */
+  private entryQueued = new WeakMap<string[], Queued[]>();
+  /** W1: day lines (y, or null when removed) and day topics of queued actions */
+  private queuedDays = new Map<string, number | null>();
+  private queuedDayTopics = new Map<string, string[]>();
 
   constructor(
     readonly slug: string,
@@ -133,6 +156,20 @@ export class CanvasModel {
       p.finally(() => this.loading.delete(month));
     }
     return p;
+  }
+
+  /** W1: loads a month that queued actions wait for, retrying until it opens. */
+  private loadForQueue(month: string) {
+    this.loadOne(month).catch(() => {
+      setTimeout(() => {
+        if (this.queued.has(month) && !this.segs.has(month)) this.loadForQueue(month);
+      }, 1000);
+    });
+  }
+
+  /** W1: whether actions are waiting for a month to load. */
+  hasQueued(): boolean {
+    return this.queued.size > 0;
   }
 
   private attach(month: string, doc: Y.Doc) {
@@ -199,6 +236,108 @@ export class CanvasModel {
     this.refreshMarks(month, marks);
     normalizeDays(doc);
     this.emit(change);
+    this.applyQueued(seg);
+  }
+
+  /** W1: applies the actions that waited for this month, each as part of its own undo step. */
+  private applyQueued(seg: Segment) {
+    const list = this.queued.get(seg.month);
+    if (!list) return;
+    this.queued.delete(seg.month);
+    for (const date of [...this.queuedDays.keys()]) if (date.startsWith(seg.month)) this.queuedDays.delete(date);
+    for (const date of [...this.queuedDayTopics.keys()]) if (date.startsWith(seg.month)) this.queuedDayTopics.delete(date);
+    for (const q of list) if (q.state === 'queued') this.applyBatch(seg, q);
+  }
+
+  private applyBatch(seg: Segment, q: Queued) {
+    this.inAction = true;
+    try {
+      const before = seg.undo.undoStack.length;
+      if (q.undoable) seg.undo.stopCapturing();
+      seg.doc.transact(() => this.apply(seg.doc, q.ops, q.touch, q.t), q.undoable ? LOCAL : LAYOUT);
+      if (q.undoable) {
+        seg.undo.stopCapturing();
+        if (seg.undo.undoStack.length > before && q.entry && !q.entry.includes(seg.month)) q.entry.push(seg.month);
+      }
+      q.state = 'applied';
+    } finally {
+      this.inAction = false;
+    }
+  }
+
+  /**
+   * W1: shows queued actions of a month that is not loaded in the caches. Every cached object
+   * and mark of such a month comes from its queue, so this rebuilds them from scratch.
+   */
+  private showQueued(month: string, change: CanvasChange) {
+    for (const [id, m] of this.where) {
+      if (m !== month) continue;
+      this.objs.delete(id);
+      this.where.delete(id);
+      this.index.delete(id);
+      change.removed.add(id);
+    }
+    for (const [id, v] of this.markCache) if (v.month === month) this.markCache.delete(id);
+    for (const date of [...this.queuedDays.keys()]) if (date.startsWith(month)) this.queuedDays.delete(date);
+    for (const date of [...this.queuedDayTopics.keys()]) if (date.startsWith(month)) this.queuedDayTopics.delete(date);
+    change.marks = true;
+    change.days = true;
+    for (const q of this.queued.get(month) ?? []) {
+      if (q.state !== 'queued') continue;
+      for (const op of q.ops) {
+        switch (op.t) {
+          case 'add':
+            this.cacheObject(month, op.obj, change);
+            break;
+          case 'update': {
+            const o = this.objs.get(op.id);
+            if (!o || this.where.get(op.id) !== month) break;
+            const next = { ...o } as Record<string, unknown>;
+            for (const [k, v] of Object.entries(op.patch)) {
+              if (k === 'id' || k === 'kind') continue;
+              if (v === undefined) delete next[k];
+              else next[k] = v;
+            }
+            if (q.touch && op.patch.edited === undefined) next.edited = q.t;
+            this.cacheObject(month, next as unknown as CanvasObject, change);
+            break;
+          }
+          case 'remove':
+            if (this.where.get(op.id) !== month) break;
+            this.objs.delete(op.id);
+            this.where.delete(op.id);
+            this.index.delete(op.id);
+            change.changed.delete(op.id);
+            change.removed.add(op.id);
+            break;
+          case 'mark':
+            this.markCache.set(op.mark.id, { mark: op.mark, month });
+            break;
+          case 'unmark':
+            this.markCache.delete(op.id);
+            break;
+          case 'day':
+            this.queuedDays.set(op.date, op.y);
+            break;
+          case 'unday':
+            this.queuedDays.set(op.date, null);
+            break;
+          case 'dayTopics':
+            this.queuedDayTopics.set(op.date, op.topics);
+            break;
+        }
+      }
+    }
+    for (const id of change.changed) change.removed.delete(id);
+  }
+
+  private cacheObject(month: string, obj: CanvasObject, change: CanvasChange) {
+    this.objs.set(obj.id, obj);
+    this.where.set(obj.id, month);
+    this.index.set(obj.id, objectBounds(obj));
+    if (this.zMax === null || obj.z > this.zMax) this.zMax = obj.z;
+    if (this.zMin === null || obj.z < this.zMin) this.zMin = obj.z;
+    change.changed.add(obj.id);
   }
 
   /** Detaches every segment (the documents themselves are owned by the store). */
@@ -229,12 +368,7 @@ export class CanvasModel {
       }
       return;
     }
-    this.objs.set(id, obj);
-    this.where.set(id, month);
-    this.index.set(id, objectBounds(obj));
-    if (this.zMax === null || obj.z > this.zMax) this.zMax = obj.z;
-    if (this.zMin === null || obj.z < this.zMin) this.zMin = obj.z;
-    change.changed.add(id);
+    this.cacheObject(month, obj, change);
   }
 
   private refreshMarks(month: string, marks: Y.Map<Y.Map<unknown>>) {
@@ -294,10 +428,16 @@ export class CanvasModel {
   dayLines(): Map<string, number> {
     const out = new Map<string, number>();
     for (const s of this.segs.values()) for (const [d, y] of dayLines(s.doc)) if (!out.has(d) || y > out.get(d)!) out.set(d, y);
+    for (const [d, y] of this.queuedDays) {
+      if (y === null) out.delete(d);
+      else out.set(d, y);
+    }
     return out;
   }
 
   dayTopics(date: string): string[] {
+    const queued = this.queuedDayTopics.get(date);
+    if (queued) return queued;
     const seg = this.segs.get(date.slice(0, 7));
     return (seg && dayTopicsMap(seg.doc).get(date)) || [];
   }
@@ -368,15 +508,24 @@ export class CanvasModel {
           route(op.date.slice(0, 7), op);
       }
     }
-    for (const month of byMonth.keys()) {
-      if (!this.segs.has(month)) throw new Error(`canvas ${this.slug}: segment ${month} is not loaded`);
-    }
 
     const undoable = opts.undoable !== false;
     const touch = opts.touch !== false;
     const t = this.now();
     const origin = undoable ? LOCAL : LAYOUT;
     const touched: string[] = [];
+    // W1: a month that is not loaded (or still has actions waiting) gets this action's
+    // operations queued behind them, never dropped
+    const waiting: Queued[] = [];
+    for (const [month, list] of byMonth) {
+      if (this.segs.has(month) && !this.queued.has(month)) continue;
+      const q: Queued = { month, ops: list, touch, t, undoable, entry: null, state: 'queued' };
+      waiting.push(q);
+      byMonth.delete(month);
+      const queue = this.queued.get(month);
+      if (queue) queue.push(q);
+      else this.queued.set(month, [q]);
+    }
     this.inAction = true;
     try {
       for (const [month, list] of byMonth) {
@@ -392,10 +541,33 @@ export class CanvasModel {
     } finally {
       this.inAction = false;
     }
-    if (touched.length) {
+    if (touched.length || (undoable && waiting.length)) {
       this.undoStack.push(touched);
       this.redoStack = [];
+      if (waiting.length) {
+        this.entryQueued.set(touched, waiting);
+        for (const q of waiting) q.entry = touched;
+      }
     }
+    if (waiting.length) this.queueChanged(new Set(waiting.map((q) => q.month)));
+  }
+
+  /** W1: shows the queues of `months` and makes sure those months load. */
+  private queueChanged(months: Set<string>) {
+    const change: CanvasChange = { changed: new Set(), removed: new Set(), marks: false, days: false, remote: false };
+    for (const month of months) {
+      if (this.segs.has(month)) {
+        // loaded meanwhile (a redo after the month opened): apply now
+        const list = this.queued.get(month) ?? [];
+        this.queued.delete(month);
+        for (const q of list) if (q.state === 'queued') this.applyBatch(this.segs.get(month)!, q);
+        continue;
+      }
+      this.showQueued(month, change);
+      if (!this.queued.get(month)?.length) this.queued.delete(month);
+      else this.loadForQueue(month);
+    }
+    this.emit(change);
   }
 
   private apply(doc: Y.Doc, ops: Op[], touch: boolean, t: number) {
@@ -470,6 +642,18 @@ export class CanvasModel {
       this.replaying = false;
     }
     to.push(months);
+    // W1: parts still waiting for their month are withdrawn on undo and queued again on redo
+    const waiting = this.entryQueued.get(months)?.filter((q) => q.state !== 'applied');
+    if (waiting?.length) {
+      const undoing = from === this.undoStack;
+      for (const q of waiting) {
+        q.state = undoing ? 'cancelled' : 'queued';
+        const queue = (this.queued.get(q.month) ?? []).filter((x) => x !== q);
+        if (!undoing) queue.push(q);
+        this.queued.set(q.month, queue);
+      }
+      this.queueChanged(new Set(waiting.map((q) => q.month)));
+    }
     return true;
   }
 }

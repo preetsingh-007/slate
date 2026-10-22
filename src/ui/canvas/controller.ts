@@ -3,7 +3,8 @@
  * React UI (menus, dialogs, other areas through the canvas API):
  *
  * - segment loading (R3): the current month always, plus months whose recorded bounds touch
- *   the view; segment bounds are recorded in the canvas index, debounced;
+ *   the view; segment bounds are recorded in the canvas index, debounced; when the date
+ *   changes (midnight, or returning to the app) the new month is loaded at once (W1);
  * - adding objects creates the day's line when C19 says so, in the same undo step;
  * - deleting an image deletes the strokes drawn on it; deleting a beautified shape deletes
  *   the strokes it replaced;
@@ -35,6 +36,44 @@ export class CanvasController implements ObjectLookup {
       void services.canvases.recordSegmentBounds(slug, this.model.segmentBounds());
     }, 1500);
     this.disposers.push(this.model.onChange.on((c) => (c.changed.size || c.removed.size ? this.recordBounds() : undefined)));
+    this.watchDate();
+  }
+
+  /**
+   * W1: the first stroke or text box of a new month needs that month's document. Load it as
+   * the date changes (a timer at midnight, and on returning to the app, since timers stall
+   * while a device sleeps). Writes made before it opens wait in the model, so this only keeps
+   * that wait short.
+   */
+  private watchDate() {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const check = () => {
+      if (!this.model.isLoaded(isoMonth(this.now()))) void this.loadForView(null).catch(() => {});
+    };
+    const arm = () => {
+      clearTimeout(timer);
+      const now = this.now();
+      const d = new Date(now);
+      const midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
+      // at most an hour, so a clock or time-zone change is noticed too
+      timer = setTimeout(() => {
+        check();
+        arm();
+      }, Math.min(midnight - now + 500, 3_600_000));
+    };
+    const onShow = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      check();
+      arm();
+    };
+    arm();
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onShow);
+    if (typeof window !== 'undefined') window.addEventListener('focus', onShow);
+    this.disposers.push(() => {
+      clearTimeout(timer);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onShow);
+      if (typeof window !== 'undefined') window.removeEventListener('focus', onShow);
+    });
   }
 
   get device(): string {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createServices } from '../../app/services';
 import { makeImage, makeShape, makeStroke } from '../../core/canvas/objects';
 import { CanvasController } from './controller';
@@ -54,5 +54,62 @@ describe('CanvasController', () => {
     ctl.addObjects([stroke(100)]);
     expect(ctl.contentBottom()).toBe(4500);
     expect(ctl.allContentBounds()!.h).toBeGreaterThan(4000);
+  });
+
+  describe('across a month boundary (W1)', () => {
+    afterEach(() => vi.useRealTimers());
+    const OCT31 = new Date(2026, 9, 31, 23, 59, 30).getTime();
+    const NOV1 = new Date(2026, 10, 1, 0, 0, 30).getTime();
+    const settle = async (until: () => boolean) => {
+      for (let i = 0; i < 200 && !until(); i++) await new Promise((r) => setImmediate(r));
+    };
+
+    it('W1: loads the new month at midnight while the app stays open', async () => {
+      const services = await createServices(`ctl-test-${Math.random()}`);
+      let now = OCT31;
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const ctl = new CanvasController(services, 'main', () => now);
+      await ctl.loadForView(null);
+      expect(ctl.model.loadedMonths()).toEqual(['2026-10']);
+      now = NOV1;
+      vi.advanceTimersByTime(31_000);
+      await settle(() => ctl.model.isLoaded('2026-11'));
+      expect(ctl.model.isLoaded('2026-11')).toBe(true);
+      ctl.dispose();
+    });
+
+    it('W1: loads the new month when the app comes back to the foreground', async () => {
+      const services = await createServices(`ctl-test-${Math.random()}`);
+      let now = OCT31;
+      const ctl = new CanvasController(services, 'main', () => now);
+      await ctl.loadForView(null);
+      now = NOV1;
+      document.dispatchEvent(new Event('visibilitychange'));
+      await settle(() => ctl.model.isLoaded('2026-11'));
+      expect(ctl.model.isLoaded('2026-11')).toBe(true);
+      ctl.dispose();
+    });
+
+    it('W1: a stroke drawn after midnight before the month loads is kept, with its day line, as one undo step', async () => {
+      const services = await createServices(`ctl-test-${Math.random()}`);
+      let now = OCT31;
+      const ctl = new CanvasController(services, 'main', () => now);
+      await ctl.loadForView(null);
+      ctl.addObjects([stroke(100, OCT31)]);
+      now = NOV1;
+      const late = stroke(400, NOV1);
+      expect(() => ctl.addObjects([late])).not.toThrow();
+      expect(ctl.get(late.id)).toBeDefined();
+      await settle(() => ctl.model.isLoaded('2026-11') && !ctl.model.hasQueued());
+      expect(ctl.model.monthOf(late.id)).toBe('2026-11');
+      const doc = await services.docs.open('seg:main:2026-11');
+      expect(doc.getMap('objects').has(late.id)).toBe(true);
+      expect(ctl.model.dayLines().get('2026-11-01')).toBe(400 - 1 - 24);
+      ctl.model.undo();
+      expect(ctl.get(late.id)).toBeUndefined();
+      expect(ctl.model.dayLines().has('2026-11-01')).toBe(false);
+      expect(ctl.model.count).toBe(1);
+      ctl.dispose();
+    });
   });
 });

@@ -248,6 +248,9 @@ function EditorBox({ id, at, initial }: { id?: string; at?: { x: number; y: numb
           else if (ytext) {
             const cur = ytext.toString();
             if (cur !== el.value) ytext.doc!.transact(() => replaceText(ytext, cur, el.value), 'local');
+          } else if (obj && obj.content !== el.value) {
+            // W1: the box's month is still opening (just after midnight): its text waits with it
+            ctl.update([[bound, { content: el.value }]]);
           }
           grow(el);
         }}
