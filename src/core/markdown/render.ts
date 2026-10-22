@@ -128,23 +128,38 @@ marked.use({
         slugCounts.set(slug, n + 1);
         if (n) slug = `${slug}-${n}`;
       }
-      return `<h${depth} id="${escapeHtml(slug)}">${inner}</h${depth}>\n`;
+      // the id goes on after sanitising (see purify): DOMPurify drops ids named like document
+      // properties ("title", "links"), which would break `#heading` links to such headings
+      return `<h${depth} ${HEADING_ID}="${escapeHtml(slug)}">${inner}</h${depth}>\n`;
     },
   },
 });
 
+/** Carries a heading's anchor through sanitising. */
+const HEADING_ID = 'data-slate-heading-id';
+
 let purifyReady = false;
+/**
+ * DOMPurify with its DOM-clobbering protection on: `id` and `name` attributes that would shadow
+ * document or form properties (`<img name="querySelector">`) are removed. Heading anchors are
+ * restored afterwards: an id on a heading cannot shadow a document property (only embed, form,
+ * iframe, img and object elements are exposed on `document`).
+ */
 function purify(html: string): string {
   if (!purifyReady) {
     DOMPurify.addHook('afterSanitizeAttributes', (node) => {
       if (node.tagName === 'A' && node.getAttribute('target') === '_blank') node.setAttribute('rel', 'noopener noreferrer');
+      const id = node.getAttribute?.(HEADING_ID);
+      if (id != null) {
+        node.removeAttribute(HEADING_ID);
+        if (/^H[1-6]$/.test(node.tagName)) node.setAttribute('id', id);
+      }
     });
     purifyReady = true;
   }
   return DOMPurify.sanitize(html, {
     ADD_ATTR: ['target', 'data-i', 'data-task', 'data-rel', 'data-rel-src', 'data-anchor', 'aria-hidden', 'encoding'],
     ADD_TAGS: ['semantics', 'annotation'],
-    SANITIZE_DOM: false,
   });
 }
 
