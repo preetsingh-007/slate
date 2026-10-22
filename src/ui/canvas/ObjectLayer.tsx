@@ -79,12 +79,18 @@ export function ObjectLayer() {
   });
 
   const { editing } = useCanvas();
+  // C7: a new box becomes an object at its first character while its editor stays mounted;
+  // the editor shows it, so the rendered view of that object is left out meanwhile
+  const [draftId, setDraftId] = useState<string>();
+  useEffect(() => {
+    if (!editing) setDraftId(undefined);
+  }, [editing]);
   return (
     <div ref={layer} className="cv-objects">
-      {editing && <EditorBox key={editing.id ?? `draft:${editing.at?.x}:${editing.at?.y}`} id={editing.id} at={editing.at} initial={editing.initial} />}
+      {editing && <EditorBox key={editing.id ?? `draft:${editing.at?.x}:${editing.at?.y}`} id={editing.id} at={editing.at} initial={editing.initial} onCreated={setDraftId} />}
       {visible.map((id) => {
         const o = ctl.model.get(id);
-        if (!o || id === editing?.id) return null;
+        if (!o || id === editing?.id || (editing && id === draftId)) return null;
         const p = preview?.get(id);
         return <ObjectView key={id} obj={p ? ({ ...o, ...p } as CanvasObject) : o} />;
       })}
@@ -177,7 +183,7 @@ function TextBoxView({ obj }: { obj: TextObject }) {
  * draft until the first character, which creates the object (and today's line, C19) without
  * swapping the element, so no keystroke or Scribble input is lost.
  */
-function EditorBox({ id, at, initial }: { id?: string; at?: { x: number; y: number }; initial?: string }) {
+function EditorBox({ id, at, initial, onCreated }: { id?: string; at?: { x: number; y: number }; initial?: string; onCreated?(id: string): void }) {
   const { ctl, engine, setEditing, services } = useCanvas();
   const ta = useRef<HTMLTextAreaElement>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -222,6 +228,7 @@ function EditorBox({ id, at, initial }: { id?: string; at?: { x: number; y: numb
   const create = (el: HTMLTextAreaElement) => {
     if (bound || !at || !el.value) return;
     const t = makeText({ id: uid(), now: Date.now(), device: ctl.device, z: ctl.model.topZ() }, { x: Math.round(at.x), y: Math.round(at.y), content: el.value });
+    onCreated?.(t.id);
     ctl.addObjects([t]);
     setBound(t.id);
   };
