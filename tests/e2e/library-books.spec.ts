@@ -242,7 +242,9 @@ test.describe('books', () => {
     await page.getByRole('textbox', { name: 'Edition' }).fill('2');
     await expect(page.locator('output.citation')).toContainText('2nd edition');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
-    await page.getByRole('combobox', { name: 'Topic' }).selectOption('math/probability/sampling');
+    // the dialog's "Add topic" field also matches "Topic" until the dialog has closed
+    await expect(page.getByRole('textbox', { name: 'Edition' })).toBeHidden();
+    await page.getByRole('combobox', { name: 'Topic', exact: true }).selectOption('math/probability/sampling');
     await expect(items).toHaveCount(1);
     await expect(items.first()).toContainText('Animals of Australia');
   });
