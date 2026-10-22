@@ -69,7 +69,7 @@ The engine is [`core/sync/engine.ts`](../src/core/sync/engine.ts) (`services.syn
 | derived (`days/`, `marks/`, `queue.md`, `todos.md`, READMEs, `annotations.md`) | ignored, except queue and to-do lines of segments not on the device | regenerated ([`derived/`](../src/core/sync/derived)) |
 | `formalized.md` | parsed into `services.formalized` | never written |
 
-Other areas download content on demand before opening it: `canvases.model(slug)` already asks sync for each month it loads; call `services.sync.ensureDoc(annotationsDocId(id))` before opening a book's or clipping's annotations, `services.sync.ensureClipping(id)` before reading a clipping's content, and `services.sync.ensureBookFile(id)` for a book file in Git LFS mode. `services.gymFiles` is the offline mirror of gym's Markdown and images, refreshed on every pull.
+Other areas download content on demand before opening it, without waiting when something is already local (it shows at once and the download merges in): `canvases.model(slug)` already asks sync for each month it loads (only an empty month waits), and `canvases.fetchAllSegments()` asks for every month for views that read all segments (S7 margin marks, canvas to-dos); call `services.sync.ensureDoc(annotationsDocId(id))` before opening a book's or clipping's annotations, `services.sync.ensureClipping(id)` before reading a clipping's content, and `services.sync.ensureBookFile(id)` for a book file in Git LFS mode. The library does this in `useAnnotations`, `useClippingContent` and `BookPane`. `services.gymFiles` is the offline mirror of gym's Markdown and images, refreshed on every pull.
 
 ## Library
 
@@ -79,3 +79,14 @@ Books (PDF, EPUB) and clippings open in the side pane (`src/ui/library/`); the l
 - Clippings are read-only after creation. New from link goes through the fetch helper only: Readability gives the Reader view; the snapshot (HTML plus images, stylesheets, their `url()` resources and scripts, stored as `assets/<hash>.<ext>`) gives the Original view.
 - Snapshots render only in `public/snapshot.html`, loaded with `sandbox="allow-scripts"` (never `allow-same-origin`) and fed over `postMessage`. Its own CSP allows no network and only its bootstrap script (by hash) and `blob:` scripts; after editing that script run `node scripts/snapshot-csp.mjs`.
 - Text-quote anchors (highlights, notes, clip source links) are offsets into the text walk of `documentText` (`core/library/snapshot.ts`), which the viewers and the snapshot frame share.
+
+## Panes and sources
+
+`src/ui/app/` holds the shell: the main canvas plus one side pane (`Workspace.tsx`, P1), one pane at a time below 700 px wide (P2), and the app store (`store.ts`: canvas, tabs, divider, sides, full screen, carry tray). Each area registers what a side-pane tab of its kind shows (`ui/panes/registry.tsx`).
+
+- P3: `layoutSync.ts` saves the layout to localStorage on every change (restored before the first render) and to `settings.panes` a moment later. Another device's newer layout is adopted on start or on returning to the app, never after a layout change made here since. Each tab keeps its place in `settings.readingPositions`: books and clippings by item id, gym files as `gym:<path>`, side-pane canvases as `canvas:<slug>` (their view, as a canvas locator). The main canvas opens per C20.
+- Lasso (S1): books, clippings and gym files use `ui/sources/LassoOverlay.tsx`; a canvas in the side pane uses its own lasso, and its selection bar's Send to canvas makes a capture (`ui/canvas/sourceCapture.ts`: the region rendered from the objects, the Markdown of its text boxes and clips, a `canvas` source link).
+- Moving captures (S3, S4): `ui/sources/send.ts` places them below the latest content when the main canvas is on screen, else in the carry tray; dropping goes through the main canvas's `CanvasApi.clientToCanvas`.
+- Source links (S6): `registerSourceOpener(type, …)` per area (`book`, `clipping`: library; `gym`: gym; `canvas`: `ui/canvas/register.tsx`). Openers open the source in the side pane, wait for its content (downloading it if needed) and flash the location for 2 s.
+- `canvasApi(slug)` returns the main pane's view of a canvas when it has one, else the side pane's.
+- `tests/e2e/sources.spec.ts` is the Milestone 4 gate: every source type, lassoed onto the real canvas and back through the clip's badge, online and offline.

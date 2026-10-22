@@ -203,3 +203,28 @@ test.describe('Milestone 4: lasso onto the canvas and back through the badge, al
     expect(v.x <= region.x && v.x + v.w >= region.x + region.w && v.y <= region.y && v.y + v.h >= region.y + region.h).toBe(true);
   });
 });
+
+test('S3: a region of a side-pane canvas dragged onto the main canvas lands where it is dropped', async ({ page }) => {
+  await openApp(page);
+  await page.locator('.cv-view[data-canvas="main"][data-ready="true"]').waitFor();
+  await page.evaluate(() => (window as unknown as { __slate: { canvases: { create(t: string, s: string): Promise<unknown> } } }).__slate.canvases.create('Physics', 'physics'));
+  await page.evaluate(() => (window as unknown as { __slateApp: { getState(): { openTab(t: object): void } } }).__slateApp.getState().openTab({ kind: 'canvas', slug: 'physics' }));
+  await page.locator('.pane-side .cv-view[data-canvas="physics"][data-ready="true"]').waitFor();
+  const view = await withCanvas<{ x: number; y: number }>(page, '(h) => h.engine.view', 'physics');
+  const [id] = await seed(page, [{ kind: 'text', x: view.x + 40, y: view.y + 60, w: 240, content: 'Dragged across' }], 'physics');
+  await withCanvas(page, `(h) => h.engine.select(['${id}'])`, 'physics');
+  const send = page.locator('.pane-side').getByRole('toolbar', { name: 'Selection, Physics' }).getByRole('button', { name: 'Send to canvas' });
+  const from = (await send.boundingBox())!;
+  const main = (await page.locator('.pane-canvas .cv-root').boundingBox())!;
+  const to: [number, number] = [main.x + 200, main.y + 300];
+  const at = await withCanvas<{ x: number; y: number }>(page, `(h) => h.api.clientToCanvas(${to[0]}, ${to[1]})`);
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  for (let i = 1; i <= 12; i++) await page.mouse.move(from.x + ((to[0] - from.x) * i) / 12, from.y + ((to[1] - from.y) * i) / 12);
+  await page.mouse.up();
+  const clip = await newClip(page, 0);
+  expect(clip.text).toBe('Dragged across');
+  const placed = (await objects(page, 'main')).find((o) => o.id === clip.id)!;
+  expect(placed.x).toBeCloseTo(at.x, -1);
+  expect(placed.y).toBeCloseTo(at.y, -1);
+});
