@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CanvasObject, ClipObject, ImageObject, ShapeObject, StrokeObject, TextObject } from '../model/types';
 import { densify } from '../ink/testing/synth';
-import { extractUrl, looksLikeMarkdown, makePayload, parsePayload, pastedTextContent, pasteObjects, payloadFromHtml, payloadHtml, plainToMarkdown, selectionMarkdown } from './clipboard';
+import { extractUrl, looksLikeMarkdown, makePayload, parsePayload, pastedTextContent, pasteObjects, payloadFromHtml, payloadHtml, plainToMarkdown, regionMarkdown, selectionMarkdown } from './clipboard';
 import { contentBottom, dayLineFor, lineForDate, previewLineY, DAY_LINE_OFFSET } from './daylines';
 import { splitStroke } from './erase';
 import { expandGroups, hitObject, lassoSelect, rectPolygon, topHit } from './hit';
@@ -210,6 +210,8 @@ describe('clipboard (C15, S9, S11)', () => {
     });
     const md = selectionMarkdown([clip, text(300, 0, '## Second'), text(0, 0, '# First'), line(0, 0, 1, 1)]);
     expect(md).toBe('# First\n\n## Second\n\n> Eigen *values*\n> line two\n>\n> — Axler, LADR');
+    // S2 for a canvas source: the region's own text, clips unquoted (the new clip links back)
+    expect(regionMarkdown([clip, text(300, 0, '## Second'), text(0, 0, '# First'), line(0, 0, 1, 1)])).toBe('# First\n\n## Second\n\nEigen *values*\nline two');
   });
 
   it('round-trips objects through JSON and HTML, pasting with new ids and references', () => {

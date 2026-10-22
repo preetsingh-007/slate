@@ -185,7 +185,7 @@ test.describe('Milestone 4: lasso onto the canvas and back through the badge, al
     await page.locator('.pane-side').getByRole('radio', { name: 'Lasso (L)' }).click();
     await canvasLasso(page, view.x + 20, view.y + 40, 280, 110, 'physics');
     await expect.poll(() => withCanvas<string[]>(page, '(h) => h.engine.getSelection()', 'physics')).toContain(textId);
-    await page.locator('.pane-side').getByRole('toolbar', { name: 'Selection' }).getByRole('button', { name: 'Send to canvas' }).click();
+    await page.locator('.pane-side').getByRole('toolbar', { name: 'Selection, Physics' }).getByRole('button', { name: 'Send to canvas' }).click();
     const clip = await newClip(page, 0);
     expect(clip.asset).toBeTruthy();
     expect(clip.natural!.w).toBeGreaterThan(400);

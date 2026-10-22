@@ -179,7 +179,7 @@ function ActionBar({ barRef, objs }: { barRef: React.RefObject<HTMLDivElement | 
   const other = getSelectionActions().filter((a) => !a.when || a.when({ canvas: slug, objects: objs, bounds }));
 
   return (
-    <div ref={barRef} className="cv-actionbar cv-ui" role="toolbar" aria-label="Selection">
+    <div ref={barRef} className="cv-actionbar cv-ui" role="toolbar" aria-label={c.embedded ? `Selection, ${services.canvases.meta(slug)?.title ?? slug}` : 'Selection'}>
       <span className="cv-sel-count" aria-live="polite">
         {objs.length === 1 ? kindLabel(objs[0]) : `${objs.length} items`}
       </span>

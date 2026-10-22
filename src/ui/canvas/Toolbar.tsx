@@ -103,7 +103,7 @@ export function Toolbar({ minimap, setMinimap, helpSignal = 0 }: { minimap: bool
   };
 
   return (
-    <div className="cv-toolbar cv-ui" role="toolbar" aria-label="Canvas tools" onKeyDown={(e) => e.key === 'Escape' && setPop(null)}>
+    <div className="cv-toolbar cv-ui" role="toolbar" aria-label={c.embedded ? `Canvas tools, ${services.canvases.meta(c.slug)?.title ?? c.slug}` : 'Canvas tools'} onKeyDown={(e) => e.key === 'Escape' && setPop(null)}>
       <div className="cv-group" role="radiogroup" aria-label="Tool">
         {TOOLS.map((t) => (
           <button
