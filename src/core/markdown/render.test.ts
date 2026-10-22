@@ -18,6 +18,17 @@ describe('renderMarkdown', () => {
     expect(html).toContain('data-rel-src="assets/a.svg"');
   });
 
+  it('never loads images from other sites (network use NFR)', () => {
+    const html = renderMarkdown('![plot](https://example.com/p.png) ![x](//cdn.example/x.png)\n\n<img src="https://t.example/pixel.gif" srcset="https://t.example/a.png 2x"><video poster="https://t.example/v.jpg"></video><div style="background: url(https://t.example/b.png)">b</div>');
+    expect(html).not.toMatch(/\s(src|srcset|poster)="(https?:)?\/\//);
+    expect(html).not.toMatch(/url\((https?:)?\/\//);
+    expect(html).toContain('<a class="md-remote-image" href="https://example.com/p.png"');
+    expect(html).toContain('[image: plot]');
+    expect(html).toContain('data-remote-src="https://t.example/pixel.gif"');
+    // local and inline images still render
+    expect(renderMarkdown('![a](data:image/png;base64,AAAA)')).toContain('<img src="data:image/png;base64,AAAA"');
+  });
+
   it('makes GitHub heading slugs', () => {
     expect(githubSlug('Rank–nullity theorem (2.7)')).toBe('ranknullity-theorem-27');
     expect(githubSlug('Q & A')).toBe('q--a');

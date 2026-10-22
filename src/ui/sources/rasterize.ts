@@ -36,6 +36,8 @@ const STYLE_PROPS = [
 ];
 
 async function toDataUrl(src: string): Promise<string | null> {
+  // network use NFR: only local images (blob:, data:, the app's own files) are read
+  if (!/^(blob|data):/i.test(src) && new URL(src, location.href).origin !== location.origin) return null;
   try {
     const blob = await (await fetch(src)).blob();
     return await new Promise((resolve) => {
