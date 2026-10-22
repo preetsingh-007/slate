@@ -106,8 +106,12 @@ export class DocStore {
     const doc = new Y.Doc({ guid: docId });
     const rows = await this.db.getUpdates(docId);
     if (rows.length) {
-      const merged = rows.length === 1 ? rows[0].data : Y.mergeUpdates(rows.map((r) => r.data));
-      Y.applyUpdate(doc, merged, LOAD_ORIGIN);
+      // Canvas speed NFR (a month opens in under 1 s): applying the log row by row in one
+      // transaction is 2–3 times faster than Y.mergeUpdates followed by one apply (a busy month,
+      // 16 MB in 20 rows: about 350 ms against 1 s)
+      doc.transact(() => {
+        for (const r of rows) Y.applyUpdate(doc, r.data, LOAD_ORIGIN);
+      }, LOAD_ORIGIN);
     }
     // Updates not yet durable (e.g. remote updates received while unloaded): in flight to
     // IndexedDB or still buffered. Re-applying something already in `rows` is a no-op.

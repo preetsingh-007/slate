@@ -126,8 +126,13 @@ export function CanvasView({ slug, embedded = false }: { slug: string; embedded?
       setReady(true);
     })();
     let saveTimer: ReturnType<typeof setTimeout> | undefined;
+    // R3, canvas speed NFR: a month starts loading as soon as the view reaches it (a jump from
+    // the date picker or the minimap, or a pan), not once the view has settled; the check is
+    // cheap when every month in reach is loaded
+    const around = (v: { x: number; y: number; w: number; h: number }) => ({ x: v.x - v.w, y: v.y - v.h, w: v.w * 3, h: v.h * 3 });
+    const offFrame = engine.frame.on(() => void ctl.loadForView(around(engine.view)));
     const offSettle = engine.settled.on((v) => {
-      void ctl.loadForView({ x: v.x - v.w, y: v.y - v.h, w: v.w * 3, h: v.h * 3 });
+      void ctl.loadForView(around(v));
       if (!embedded || !engine.width) return;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
@@ -143,6 +148,7 @@ export function CanvasView({ slug, embedded = false }: { slug: string; embedded?
       mq.removeEventListener('change', onMq);
       window.removeEventListener('resize', onWin);
       offSettle();
+      offFrame();
       clearTimeout(saveTimer);
     };
   }, [engine, ctl, embedded, viewId, firstView, services, slug]);
