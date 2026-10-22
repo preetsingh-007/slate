@@ -58,6 +58,20 @@ export function PdfViewer({ book, onMissing }: { book: BookMeta; onMissing(): vo
   const scroll = useRef<HTMLDivElement>(null);
   const restored = useRef(false);
   const { doc: annDoc, list: annotations } = useAnnotations(book.id);
+  // L4/durability: ink or highlights made in the moment before the annotation document has
+  // opened are kept here and saved as soon as it is ready, never dropped
+  const pendingAnn = useRef<Annotation[]>([]);
+  const saveAnnotation = useCallback(
+    (a: Annotation) => {
+      if (annDoc) putAnnotation(annDoc, a);
+      else pendingAnn.current.push(a);
+    },
+    [annDoc],
+  );
+  useEffect(() => {
+    if (!annDoc || !pendingAnn.current.length) return;
+    for (const a of pendingAnn.current.splice(0)) putAnnotation(annDoc, a);
+  }, [annDoc]);
   const clipRefs = useClipRefs(book.id);
   const jump = useLibraryUi((s) => s.jumps[book.id]);
 
@@ -328,9 +342,8 @@ export function PdfViewer({ book, onMissing }: { book: BookMeta; onMissing(): vo
   hlColorRef.current = hlColor;
 
   const addHighlight = (s: PdfSelection, color: string) => {
-    if (!annDoc) return;
     const loc: PdfLocator = { type: 'pdf', page: s.page, region: s.region, quote: s.text.slice(0, 500) };
-    putAnnotation(annDoc, newAnnotation('highlight', loc, { color, rects: s.rects, text: s.text }));
+    saveAnnotation(newAnnotation('highlight', loc, { color, rects: s.rects, text: s.text }));
   };
 
   // ---------------------------------------------------------------- ink and notes (L4)
@@ -344,15 +357,14 @@ export function PdfViewer({ book, onMissing }: { book: BookMeta; onMissing(): vo
 
   const onStroke = useCallback(
     (pageN: number, pts: number[]) => {
-      if (!annDoc) return;
       const b = inkBounds(pts, inkStyle.size);
       const s = sizes.get(pageN) ?? baseSize;
       const aspect = s ? s.w / s.h : 1;
       // region normalised to the page (y in page heights)
       const region = { x: b.x, y: b.y * aspect, w: b.w, h: b.h * aspect };
-      putAnnotation(annDoc, newAnnotation('ink', { type: 'pdf', page: pageN, region, quote: '' }, { color: inkStyle.color, strokes: [{ pts, color: inkStyle.color, size: inkStyle.size, tool: inkStyle.tool }] }));
+      saveAnnotation(newAnnotation('ink', { type: 'pdf', page: pageN, region, quote: '' }, { color: inkStyle.color, strokes: [{ pts, color: inkStyle.color, size: inkStyle.size, tool: inkStyle.tool }] }));
     },
-    [annDoc, inkStyle, sizes, baseSize],
+    [saveAnnotation, inkStyle, sizes, baseSize],
   );
   const onErase = useCallback((ids: string[]) => annDoc && ids.forEach((id) => removeAnnotation(annDoc, id)), [annDoc]);
   const onNoteAt = useCallback(
