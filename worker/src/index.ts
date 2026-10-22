@@ -71,7 +71,7 @@ export async function handle(request: Request, env: Env, fetcher: typeof fetch, 
       headers.set('X-Upstream-Status', String(upstream.status));
       headers.set('Cache-Control', 'no-store');
       headers.set('Access-Control-Expose-Headers', 'X-Final-Url, X-Upstream-Status, Content-Type');
-      return new Response(body, { status: 200, headers });
+      return new Response(body as Uint8Array<ArrayBuffer>, { status: 200, headers });
     }
   } catch (err) {
     if (controller.signal.aborted) return error(504, 'The site took longer than 15 seconds.', cors);
