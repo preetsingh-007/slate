@@ -149,6 +149,14 @@ export async function push(ctx: SyncContext, opts: PushOptions = {}): Promise<Pu
   };
 
   const tombs = library.tombstones();
+  // L13: a tombstone removes its folder only while the folder still holds that item; another
+  // device may have deleted it too and created a new item under the same name since
+  const holder = (t: (typeof tombs)[number]) => {
+    const path = t.kind === 'book' ? bookJsonPath(t.slug) : clippingMetaPath(t.slug);
+    if (!(path in st.tree)) return 'none';
+    return (st.base[path] as { id?: unknown } | undefined)?.id === t.id ? 'item' : 'other';
+  };
+  const replaced = new Set(tombs.filter((t) => holder(t) === 'other').map((t) => t.id));
   const sig = indexSignature(ctx);
   const regenerateAll = st.derivedVersion !== DERIVED_VERSION || st.indexSig !== sig || tombs.length > 0;
 
@@ -165,6 +173,7 @@ export async function push(ctx: SyncContext, opts: PushOptions = {}): Promise<Pu
   // ---------------------------------------------------------------- 1. source files
 
   for (const t of tombs) {
+    if (replaced.has(t.id)) continue;
     const dir = (t.kind === 'book' ? bookDir(t.slug) : clippingDir(t.slug)) + '/';
     for (const p of Object.keys(st.tree)) if (p.startsWith(dir)) plan.delete(p);
   }
@@ -430,7 +439,11 @@ export async function push(ctx: SyncContext, opts: PushOptions = {}): Promise<Pu
     st.derivedVersion = DERIVED_VERSION;
     st.indexSig = sig;
     await ctx.save();
-    for (const t of tombs) if (!Object.keys(st.tree).some((p) => p.startsWith((t.kind === 'book' ? bookDir(t.slug) : clippingDir(t.slug)) + '/'))) await ctx.quietly(() => library.clearTombstone(t.id));
+    // a tombstone is done once its folder is gone, or holds another item now
+    for (const t of tombs) {
+      const gone = !Object.keys(st.tree).some((p) => p.startsWith((t.kind === 'book' ? bookDir(t.slug) : clippingDir(t.slug)) + '/'));
+      if (gone || replaced.has(t.id)) await ctx.quietly(() => library.clearTombstone(t.id));
+    }
   };
 
   const pushedDocs = [...docOut.values()].map((d) => d.docId);
