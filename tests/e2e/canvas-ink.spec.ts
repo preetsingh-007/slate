@@ -47,7 +47,7 @@ test.describe('ink (C6, C12, C13, C17, C18, C19)', () => {
     await page.getByRole('button', { name: 'Pink', exact: true }).click();
     await drawMouse(page, line([100, 320], [400, 320]));
     await page.getByRole('radio', { name: /^Pen/ }).click();
-    await page.getByLabel('Add a custom colour').locator('input').fill('#123456');
+    await page.getByLabel('Add a custom colour').fill('#123456');
     await drawMouse(page, wave(100, 420));
     const objs = await objects(page);
     expect(objs.map((o) => [o.tool, o.color])).toEqual([

@@ -12,6 +12,7 @@ import { FetchError, helperFetch, isConfigured } from '../../../core/library/hel
 import { classifyUrl, fileNameFromUrl, normalizeUrl, type LinkKind } from '../../../core/library/links';
 import type { ResourceFetcher } from '../../../core/library/snapshot';
 import { toast } from '../../common/toast';
+import { usePopupFocus } from '../../common/focus';
 import { newFromClipboard, openBook, openClipping } from '../actions';
 import { useLibraryUi } from '../state';
 
@@ -30,6 +31,9 @@ export function NewFromLinkDialog({ initialUrl }: { initialUrl?: string }) {
   const [helperUrl, setHelperUrl] = useState(services.settings.getSecrets().helperUrl ?? '');
   const [helperKey, setHelperKey] = useState(services.settings.getSecrets().helperKey ?? '');
   const input = useRef<HTMLInputElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
+  // the address field takes focus (the effect below); Tab stays inside; focus returns on close
+  usePopupFocus(dialog, { trap: true, autoFocus: false });
   const abort = useRef<AbortController | null>(null);
   const close = () => {
     abort.current?.abort();
@@ -111,7 +115,7 @@ export function NewFromLinkDialog({ initialUrl }: { initialUrl?: string }) {
 
   return (
     <div className="dialog-backdrop" onPointerDown={(e) => e.target === e.currentTarget && close()}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="nfl-title">
+      <div ref={dialog} className="dialog" role="dialog" aria-modal="true" aria-labelledby="nfl-title">
         <h2 id="nfl-title">
           <Link2 size={18} /> New from link
         </h2>

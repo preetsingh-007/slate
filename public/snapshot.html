@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+r1Q/CfnqyY3S66lpy8WiMiVpUdExS7AAqzL/UcVlyA=' blob:; style-src 'unsafe-inline' blob:; img-src blob: data:; font-src blob: data:; media-src blob: data:; connect-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-yebeMZgkuckEveK5c9t+6N/g7Gp1N7lSNFwHV5OoU8M=' blob:; style-src 'unsafe-inline' blob:; img-src blob: data:; font-src blob: data:; media-src blob: data:; connect-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Snapshot</title>
@@ -241,9 +241,11 @@
     const rs = rectsOf(r);
     if (rs[0]) scrollTo({ top: Math.max(0, rs[0].top + scrollY - innerHeight / 3) });
     const root = overlayRoot();
-    const made = rectsOf(r).map((rc) => root.appendChild(box(rc, 'background:rgba(255,196,0,.45);outline:3px solid rgba(255,196,0,.9);border-radius:3px;transition:opacity .4s;')));
+    // reduced motion: the highlight stays still for its 2 seconds, then goes without a fade
+    const fade = matchMedia('(prefers-reduced-motion: reduce)').matches ? '' : 'transition:opacity .4s;';
+    const made = rectsOf(r).map((rc) => root.appendChild(box(rc, 'background:rgba(255,196,0,.45);outline:3px solid rgba(255,196,0,.9);border-radius:3px;' + fade)));
     for (const d of made) d.setAttribute('data-flash', '');
-    setTimeout(() => made.forEach((d) => (d.style.opacity = '0')), 1600);
+    if (fade) setTimeout(() => made.forEach((d) => (d.style.opacity = '0')), 1600);
     setTimeout(() => made.forEach((d) => d.remove()), 2000);
   }
 

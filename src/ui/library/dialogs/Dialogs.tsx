@@ -11,11 +11,15 @@ import { LibraryTextIndex } from '../../../core/library/textIndex';
 import { useApp } from '../../app/store';
 import { getTopicPicker } from '../../common/registries';
 import { toast } from '../../common/toast';
+import { usePopupFocus } from '../../common/focus';
 import { newFromClipboard } from '../actions';
 import { TopicTags } from '../clipping/ClippingPane';
 import { useLibraryUi } from '../state';
 
 function Dialog({ title, children, onClose, labelId }: { title: ReactNode; children: ReactNode; onClose(): void; labelId: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  // focus moves in (a dialog's own autofocus wins), Tab stays inside, focus returns on close
+  usePopupFocus(ref, { trap: true });
   useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', esc);
@@ -23,7 +27,7 @@ function Dialog({ title, children, onClose, labelId }: { title: ReactNode; child
   }, [onClose]);
   return (
     <div className="dialog-backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-labelledby={labelId}>
+      <div ref={ref} className="dialog" role="dialog" aria-modal="true" aria-labelledby={labelId}>
         <h2 id={labelId}>{title}</h2>
         {children}
       </div>

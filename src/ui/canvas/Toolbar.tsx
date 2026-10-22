@@ -32,6 +32,7 @@ import { lineForDate, sortedLines } from '../../core/canvas/daylines';
 import { dayLabel, isoDate } from '../../core/util/time';
 import type { DevicePrefs } from '../../core/stores/settings';
 import { useCanvas, useModelVersion } from './context';
+import { Popup } from '../common/focus';
 import { insertImages, pasteFromClipboard } from './actions';
 import { COLOR_NAMES, HIGHLIGHTER_COLORS, HIGHLIGHTER_SIZES, PEN_COLORS, PEN_SIZES, useTools, type Tool } from './toolStore';
 
@@ -58,11 +59,13 @@ export const SHORTCUTS: [string, string][] = [
   ['] / [', 'Bring forward / send back'],
   ['⌘A', 'Select everything in view'],
   ['⌥→ / ⌥←', 'Select the next / previous object in view'],
+  ['⇧⌥→ / ⇧⌥←', 'Add the next / previous object to the selection'],
+  ['Tab', 'From the canvas to the selection’s actions'],
   ['Arrows', 'Nudge the selection (Shift: 10×), or pan'],
   ['⌘= / ⌘− / ⌘0', 'Zoom in / out / 100%'],
   ['⇧1 / ⇧2', 'Fit all / fit selection'],
   ['Home', 'Jump to now'],
-  ['Enter', 'Edit the selected text box'],
+  ['Enter', 'Edit the selected text box, or start one in view'],
   ['Click, then type', 'A text box where you clicked'],
   ['Esc', 'Clear the selection or stop editing'],
   ['?', 'This help'],
@@ -164,10 +167,11 @@ export function Toolbar({ minimap, setMinimap, helpSignal = 0 }: { minimap: bool
                 onClick={() => setStyle({ color: col })}
               />
             ))}
-            <label className="cv-swatch cv-add-color" title="Add a custom colour" aria-label="Add a custom colour">
-              <Plus size={14} />
+            <label className="cv-swatch cv-add-color" title="Add a custom colour">
+              <Plus size={14} aria-hidden />
               <input
                 type="color"
+                aria-label="Add a custom colour"
                 className="visually-hidden"
                 onChange={(e) => {
                   const col = e.target.value.toLowerCase();
@@ -223,16 +227,16 @@ export function Toolbar({ minimap, setMinimap, helpSignal = 0 }: { minimap: bool
         {tool === 'space' && <span className="cv-muted">Drag to insert space, drag back to remove it.</span>}
       </div>
       <span className="cv-spacer" />
-      <button type="button" className="cv-btn" aria-label="Go to a date" title="Go to a date" aria-expanded={pop === 'date'} onClick={() => toggle('date')}>
+      <button type="button" className="cv-btn cv-view-btn" aria-label="Go to a date" title="Go to a date" aria-expanded={pop === 'date'} onClick={() => toggle('date')}>
         <Calendar size={20} />
       </button>
-      <button type="button" className="cv-btn cv-zoom" aria-label={`Zoom ${zoom}%, view options`} title="View" aria-expanded={pop === 'zoom'} onClick={() => toggle('zoom')}>
+      <button type="button" className="cv-btn cv-view-btn cv-zoom" aria-label={`Zoom ${zoom}%, view options`} title="View" aria-expanded={pop === 'zoom'} onClick={() => toggle('zoom')}>
         {zoom}%
       </button>
-      <button type="button" className="cv-btn" aria-label="Canvas settings" title="Canvas settings" aria-expanded={pop === 'settings'} onClick={() => toggle('settings')}>
+      <button type="button" className="cv-btn cv-view-btn" aria-label="Canvas settings" title="Canvas settings" aria-expanded={pop === 'settings'} onClick={() => toggle('settings')}>
         <Settings size={20} />
       </button>
-      <button type="button" className="cv-btn" aria-label="Keyboard shortcuts and help (?)" title="Help (?)" aria-expanded={pop === 'help'} onClick={() => toggle('help')}>
+      <button type="button" className="cv-btn cv-view-btn" aria-label="Keyboard shortcuts and help (?)" title="Help (?)" aria-expanded={pop === 'help'} onClick={() => toggle('help')}>
         <CircleHelp size={20} />
       </button>
 
@@ -240,7 +244,7 @@ export function Toolbar({ minimap, setMinimap, helpSignal = 0 }: { minimap: bool
       <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => (onFiles(e.target.files), (e.target.value = ''))} />
 
       {pop === 'image' && (
-        <div className="cv-popover cv-menu cv-pop-left" role="menu" aria-label="Insert image">
+        <Popup className="cv-popover cv-menu cv-pop-left" role="menu" label="Insert image" onClose={() => setPop(null)}>
           <button type="button" role="menuitem" onClick={() => files.current?.click()}>
             <Images size={16} /> Photo library or files
           </button>
@@ -250,18 +254,18 @@ export function Toolbar({ minimap, setMinimap, helpSignal = 0 }: { minimap: bool
           <button type="button" role="menuitem" onClick={() => (setPop(null), void pasteFromClipboard(actions))}>
             <ImagePlus size={16} /> Paste
           </button>
-        </div>
+        </Popup>
       )}
       {pop === 'size' && (
-        <div className="cv-popover cv-pop-left" role="dialog" aria-label="Custom size">
+        <Popup className="cv-popover cv-pop-left" role="dialog" label="Custom size" onClose={() => setPop(null)}>
           <label className="field">
             <span>Size: {style.size}</span>
             <input type="range" min={isHl ? 4 : 0.5} max={isHl ? 60 : 16} step={0.5} value={style.size} onChange={(e) => setStyle({ size: Number(e.target.value) })} />
           </label>
-        </div>
+        </Popup>
       )}
       {pop === 'zoom' && (
-        <div className="cv-popover cv-menu" role="menu" aria-label="View">
+        <Popup className="cv-popover cv-menu" role="menu" label="View" onClose={() => setPop(null)}>
           <button type="button" role="menuitem" onClick={() => (setPop(null), void engine.fitAll())}>
             Fit all <kbd>⇧1</kbd>
           </button>
@@ -288,12 +292,12 @@ export function Toolbar({ minimap, setMinimap, helpSignal = 0 }: { minimap: bool
               <Tag size={16} /> Tag this canvas…
             </button>
           )}
-        </div>
+        </Popup>
       )}
       {pop === 'date' && <DatePopover onClose={() => setPop(null)} />}
-      {pop === 'settings' && <SettingsPopover />}
+      {pop === 'settings' && <SettingsPopover onClose={() => setPop(null)} />}
       {pop === 'help' && (
-        <div className="cv-popover cv-help" role="dialog" aria-label="Keyboard shortcuts and gestures">
+        <Popup className="cv-popover cv-help" role="dialog" label="Keyboard shortcuts and gestures" onClose={() => setPop(null)}>
           <h3>Keyboard</h3>
           <dl>
             {SHORTCUTS.map(([k, v]) => (
@@ -312,7 +316,7 @@ export function Toolbar({ minimap, setMinimap, helpSignal = 0 }: { minimap: bool
             <li>Two-finger tap: undo. Double-tap: edit text or start a text box.</li>
             <li>The stylus eraser end and barrel button work where the browser reports them. Safari does not expose Pencil double-tap or squeeze to web apps.</li>
           </ul>
-        </div>
+        </Popup>
       )}
     </div>
   );
@@ -335,7 +339,7 @@ function DatePopover({ onClose }: { onClose(): void }) {
     onClose();
   };
   return (
-    <div className="cv-popover cv-dates" role="dialog" aria-label="Go to a date">
+    <Popup className="cv-popover cv-dates" role="dialog" label="Go to a date" onClose={onClose}>
       <label className="field">
         <span>Date</span>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && go(date)} />
@@ -353,11 +357,11 @@ function DatePopover({ onClose }: { onClose(): void }) {
           </li>
         ))}
       </ul>
-    </div>
+    </Popup>
   );
 }
 
-function SettingsPopover() {
+function SettingsPopover({ onClose }: { onClose(): void }) {
   const { services } = useCanvas();
   const [prefs, setPrefs] = useState<DevicePrefs>(services.settings.getPrefs());
   const set = (p: Partial<DevicePrefs>) => {
@@ -366,7 +370,7 @@ function SettingsPopover() {
   };
   const penDetected = useTools((s) => s.penDetected);
   return (
-    <div className="cv-popover cv-settings" role="dialog" aria-label="Canvas settings">
+    <Popup className="cv-popover cv-settings" role="dialog" label="Canvas settings" onClose={onClose}>
       <label className="cv-check">
         <input type="checkbox" checked={prefs.fingerDrawing} onChange={(e) => set({ fingerDrawing: e.target.checked })} />
         Draw with a finger {penDetected ? '(a Pencil was detected)' : ''}
@@ -384,6 +388,6 @@ function SettingsPopover() {
         <input type="range" min={200} max={1000} step={50} value={prefs.spaceHoldMs} onChange={(e) => set({ spaceHoldMs: Number(e.target.value) })} />
       </label>
       <p className="cv-muted">Pencil double-tap and squeeze are not available to web apps in Safari; the stylus button above is the closest the browser allows.</p>
-    </div>
+    </Popup>
   );
 }

@@ -78,6 +78,9 @@ export class SlateDB {
   async putUpdate(docId: string, data: Uint8Array): Promise<void> {
     const tx = this.db.transaction('updates', 'readwrite');
     tx.objectStore('updates').put({ docId, seq: this.nextSeq(), writer: WRITER, data } satisfies UpdateRow);
+    // durability NFR: commit now rather than when the event loop next turns (the page may be
+    // closing); older engines without commit() commit automatically
+    tx.commit?.();
     await txDone(tx);
   }
 

@@ -137,6 +137,12 @@
   margin: 0 3px;
 }
 
+/* the colour input inside is visually hidden: show its focus on the swatch */
+.cv-add-color:has(:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .cv-size,
 .cv-preset {
   display: inline-grid;
@@ -1100,6 +1106,13 @@
   border-color: transparent;
 }
 
+@media (max-width: 520px) {
+  .cv-switch-btn {
+    max-width: 110px;
+    padding: 4px 6px;
+  }
+}
+
 .cv-switch-title {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1247,6 +1260,47 @@
   color: var(--accent);
 }
 
+/* phones (P2, iPhone scope): the toolbar in two rows instead of five; the tool options scroll */
+@media (max-width: 520px) {
+  .cv-toolbar {
+    gap: 0;
+    padding-left: max(4px, env(safe-area-inset-left));
+    padding-right: max(4px, env(safe-area-inset-right));
+  }
+
+  .cv-toolbar .cv-btn {
+    min-width: 34px;
+    height: 38px;
+    padding: 0 4px;
+  }
+
+  .cv-toolbar > .cv-sep {
+    margin: 0 1px;
+  }
+
+  .cv-toolbar .cv-spacer {
+    display: none;
+  }
+
+  /* the second row: the tool options (scrolling) beside the view buttons */
+  .cv-style {
+    order: 1;
+    flex: 1 1 calc(100% - 170px);
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .cv-style > * {
+    flex-shrink: 0;
+  }
+
+  .cv-view-btn {
+    order: 2;
+  }
+}
+
 @media (max-width: 700px) {
   .cv-carry {
     top: auto;
@@ -1254,7 +1308,7 @@
     right: 0;
     left: 0;
     width: auto;
-    max-height: 120px;
+    max-height: 160px;
     transform: none;
     border-radius: 12px 12px 0 0;
     border-right: 1px solid var(--border);
@@ -1268,6 +1322,15 @@
 
   .cv-carry-item {
     flex: 0 0 120px;
+  }
+
+  /* a card fits the strip's height */
+  .cv-carry-card img {
+    max-height: 48px;
+  }
+
+  .cv-carry-card p {
+    max-height: 32px;
   }
 
   .cv-minimap {

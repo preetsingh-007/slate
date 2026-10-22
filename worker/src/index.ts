@@ -214,7 +214,7 @@ export function dohResolver(fetcher: typeof fetch): Resolver {
   };
 }
 
-async function readLimited(res: Response, limit: number): Promise<Uint8Array | null> {
+async function readLimited(res: Response, limit: number): Promise<Uint8Array<ArrayBuffer> | null> {
   if (!res.body) return new Uint8Array();
   const reader = res.body.getReader();
   const chunks: Uint8Array[] = [];

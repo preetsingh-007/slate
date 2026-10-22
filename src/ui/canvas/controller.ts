@@ -80,6 +80,12 @@ export class CanvasController implements ObjectLookup {
     return this.services.device;
   }
 
+  /** Writes pending changes now (the page may be closing): segment bounds, then documents. */
+  flush() {
+    this.recordBounds.flush();
+    void this.services.docs.flushNow();
+  }
+
   dispose() {
     this.recordBounds.flush();
     for (const d of this.disposers) d();

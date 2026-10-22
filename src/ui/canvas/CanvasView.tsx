@@ -126,8 +126,13 @@ export function CanvasView({ slug, embedded = false }: { slug: string; embedded?
       setReady(true);
     })();
     let saveTimer: ReturnType<typeof setTimeout> | undefined;
+    // R3, canvas speed NFR: a month starts loading as soon as the view reaches it (a jump from
+    // the date picker or the minimap, or a pan), not once the view has settled; the check is
+    // cheap when every month in reach is loaded
+    const around = (v: { x: number; y: number; w: number; h: number }) => ({ x: v.x - v.w, y: v.y - v.h, w: v.w * 3, h: v.h * 3 });
+    const offFrame = engine.frame.on(() => void ctl.loadForView(around(engine.view)));
     const offSettle = engine.settled.on((v) => {
-      void ctl.loadForView({ x: v.x - v.w, y: v.y - v.h, w: v.w * 3, h: v.h * 3 });
+      void ctl.loadForView(around(v));
       if (!embedded || !engine.width) return;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
@@ -143,6 +148,7 @@ export function CanvasView({ slug, embedded = false }: { slug: string; embedded?
       mq.removeEventListener('change', onMq);
       window.removeEventListener('resize', onWin);
       offSettle();
+      offFrame();
       clearTimeout(saveTimer);
     };
   }, [engine, ctl, embedded, viewId, firstView, services, slug]);
@@ -258,6 +264,9 @@ export function CanvasView({ slug, embedded = false }: { slug: string; embedded?
       if (markDialog || topics || isEditable(e.target)) return;
       const mod = e.metaKey || e.ctrlKey;
       const k = e.key;
+      // keyboard: Enter, Space and the arrows belong to the focused button, menu or lasso
+      const onControl = e.target instanceof Element && e.target !== root.current && !!e.target.closest('button, a[href], [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="radio"], [role="application"], [role="slider"]');
+      if (onControl && !mod && (k === 'Enter' || k === ' ' || k.startsWith('Arrow') || k === 'Home' || k === 'End')) return;
       const sel = engine.getSelection();
       // typing on an empty spot starts a text box there (C7)
       if (armed.current && k.length === 1 && !mod && !e.altKey && k !== ' ') {
@@ -340,12 +349,37 @@ export function CanvasView({ slug, embedded = false }: { slug: string; embedded?
         setEditing({ id: sel[0] });
         return;
       }
+      if (k === 'Enter' && !sel.length && e.target === root.current) {
+        // C7 from the keyboard: a new text box at the top left of the view
+        e.preventDefault();
+        const v = engine.view;
+        const k1 = engine.pxPerUnit;
+        setEditing({ at: { x: Math.round(v.x + 48 / k1), y: Math.round(v.y + Math.min(v.h * 0.25, 160 / k1)) } });
+        return;
+      }
+      if (k === 'Tab' && !e.shiftKey && sel.length && e.target === root.current) {
+        // from the canvas to the selection's actions (mark for gym, tag, export…)
+        const first = root.current?.querySelector<HTMLElement>('.cv-actionbar button:not([disabled])');
+        if (first) {
+          e.preventDefault();
+          first.focus();
+        }
+        return;
+      }
       if (e.altKey && (k === 'ArrowRight' || k === 'ArrowLeft')) {
-        // keyboard selection: the next or previous object in view, in reading order
+        // keyboard selection: the next or previous object in view, in reading order; with
+        // Shift the selection grows instead (the keyboard's lasso)
         e.preventDefault();
         const inView = readingOrder(ctl.model.query(engine.view).filter((o) => !(o.kind === 'stroke' && o.beautifiedInto)));
         if (!inView.length) return;
-        const cur = inView.findIndex((o) => o.id === sel[0]);
+        const at = (id: string | undefined) => inView.findIndex((o) => o.id === id);
+        if (e.shiftKey) {
+          const picked = sel.map(at).filter((i) => i >= 0);
+          const next = !picked.length ? (k === 'ArrowRight' ? 0 : inView.length - 1) : k === 'ArrowRight' ? Math.max(...picked) + 1 : Math.min(...picked) - 1;
+          if (next >= 0 && next < inView.length) engine.select([...sel, inView[next].id]);
+          return;
+        }
+        const cur = at(sel[0]);
         const next = cur < 0 ? (k === 'ArrowRight' ? 0 : inView.length - 1) : (cur + (k === 'ArrowRight' ? 1 : -1) + inView.length) % inView.length;
         engine.select([inView[next].id]);
         return;

@@ -1,6 +1,6 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest';
-import { MAX_BYTES, checkUrl, handle, isPrivateIp, type Env } from './index';
+import { describe, expect, it, vi } from 'vitest';
+import { MAX_BYTES, TIMEOUT_MS, checkUrl, handle, isPrivateIp, type Env } from './index';
 
 const env: Env = { SLATE_KEY: 'secret', ALLOWED_ORIGINS: 'https://app.example' };
 const publicDns = async () => ['93.184.216.34'];
@@ -83,5 +83,63 @@ describe('fetch helper', () => {
     const pre = await handle(req('https://a.example/', { method: 'OPTIONS', key: null }), env, fetch, publicDns);
     expect(pre.status).toBe(204);
     expect(pre.headers.get('Access-Control-Allow-Headers')).toBe('X-Slate-Key');
+  });
+
+  // fetch helper NFR: GET over http(s) only; private addresses refused; 10 MB and 15 s limits;
+  // a secret header; no content logged; the site sees the URL and nothing of the person
+  it('stops at 15 seconds', async () => {
+    vi.useFakeTimers();
+    try {
+      const hang = ((_u: string, init: RequestInit) =>
+        new Promise<Response>((_, reject) => init.signal!.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))))) as unknown as typeof fetch;
+      const pending = handle(req('https://slow.example/'), env, hang, publicDns);
+      await vi.advanceTimersByTimeAsync(TIMEOUT_MS - 1);
+      let done = false;
+      void pending.then(() => (done = true));
+      await Promise.resolve();
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect((await pending).status).toBe(504);
+      expect(TIMEOUT_MS).toBe(15_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops a body without Content-Length at 10 MB, and follows at most 5 redirects', async () => {
+    expect(MAX_BYTES).toBe(10 * 1024 * 1024);
+    const stream = (async () =>
+      new Response(
+        new ReadableStream({
+          pull(c) {
+            c.enqueue(new Uint8Array(1024 * 1024));
+          },
+        }),
+        { status: 200 },
+      )) as unknown as typeof fetch;
+    expect((await handle(req('https://a.example/'), env, stream, publicDns)).status).toBe(413);
+    let n = 0;
+    const loop = (async () => new Response(null, { status: 302, headers: { Location: `/r${n++}` } })) as unknown as typeof fetch;
+    expect((await handle(req('https://a.example/'), env, loop, publicDns)).status).toBe(508);
+    expect(n).toBe(6);
+  });
+
+  it('logs nothing and passes nothing of the request on to the site', async () => {
+    const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((m) => vi.spyOn(console, m).mockImplementation(() => {}));
+    let sent: Headers | undefined;
+    const fetcher = (async (_u: string, init: RequestInit) => {
+      sent = new Headers(init.headers);
+      return new Response('<p>secret page content</p>', { status: 200, headers: { 'Content-Type': 'text/html' } });
+    }) as unknown as typeof fetch;
+    const r = new Request('https://helper.example/?url=https%3A%2F%2Fa.example%2F', { headers: { 'X-Slate-Key': 'secret', Origin: 'https://app.example', Cookie: 'session=1', Authorization: 'token abc', Referer: 'https://app.example/' } });
+    expect((await handle(r, env, fetcher, publicDns)).status).toBe(200);
+    const names: string[] = [];
+    sent!.forEach((_v, k) => names.push(k));
+    expect(names.sort()).toEqual(['accept', 'user-agent']);
+    await handle(req('http://127.0.0.1/'), env, fetcher, publicDns);
+    for (const s of spies) {
+      expect(s).not.toHaveBeenCalled();
+      s.mockRestore();
+    }
   });
 });

@@ -257,7 +257,11 @@ function EditorBox({ id, at, initial }: { id?: string; at?: { x: number; y: numb
         onKeyDown={(e) => {
           if (e.key === 'Escape' || ((e.metaKey || e.ctrlKey) && e.key === 'Enter')) {
             e.preventDefault();
-            e.currentTarget.blur();
+            // back to the canvas (which ends editing and selects the box), so keyboard focus
+            // is not lost with the editor
+            const root = e.currentTarget.closest('.cv-view')?.querySelector<HTMLElement>('.cv-root');
+            if (root) root.focus({ preventScroll: true });
+            else e.currentTarget.blur();
           } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
             e.preventDefault();
             if (e.shiftKey) ctl.model.redo();

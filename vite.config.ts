@@ -1,6 +1,16 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+
+/**
+ * The snapshot frame's bootstrap script hash (public/snapshot.html, kept current by
+ * scripts/snapshot-csp.mjs). The frame is a srcdoc document, so the app's CSP applies to it as
+ * well as its own: the app allows this one script and the frame's blob: resources, while the
+ * frame's own CSP still allows no network.
+ */
+const snapshotScript = /script-src ('sha256-[^']+')/.exec(readFileSync(new URL('./public/snapshot.html', import.meta.url), 'utf8'))?.[1];
+if (!snapshotScript) throw new Error('public/snapshot.html has no script hash: run node scripts/snapshot-csp.mjs');
 
 /**
  * Strict Content Security Policy for the built app. The app contacts only GitHub and the
@@ -9,11 +19,11 @@ import { VitePWA } from 'vite-plugin-pwa';
  */
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'wasm-unsafe-eval'",
-  "style-src 'self' 'unsafe-inline'",
+  `script-src 'self' 'wasm-unsafe-eval' ${snapshotScript} blob:`,
+  "style-src 'self' 'unsafe-inline' blob:",
   "img-src 'self' blob: data:",
-  "font-src 'self' data:",
-  "media-src 'self' blob:",
+  "font-src 'self' data: blob:",
+  "media-src 'self' blob: data:",
   "frame-src 'self' blob:",
   "worker-src 'self' blob:",
   `connect-src 'self' https://api.github.com https://*.workers.dev blob: data:${process.env.SLATE_E2E ? ' http://localhost:*' : ''}`,
@@ -54,17 +64,11 @@ export default defineConfig({
       },
       workbox: {
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
-        globPatterns: ['**/*.{js,css,html,svg,png,woff2,mjs}'],
-        globIgnores: ['pdfjs/**'],
+        // Offline NFR: everything the app can need without the network is precached on the first
+        // visit, including all of pdf.js's CMaps, standard fonts, wasm decoders and ICC profiles
+        // (about 4 MB): a book first opened offline may need any of them.
+        globPatterns: ['**/*.{js,css,html,svg,png,woff2,mjs}', 'pdfjs/**/*.{bcmap,pfb,ttf,wasm,icc}'],
         navigateFallbackDenylist: [/\/pdfjs\//],
-        runtimeCaching: [
-          {
-            // pdf.js CMaps, standard fonts and wasm: fetched on demand, then available offline
-            urlPattern: ({ url }) => url.pathname.includes('/pdfjs/'),
-            handler: 'CacheFirst',
-            options: { cacheName: 'pdfjs-assets', expiration: { maxEntries: 500 } },
-          },
-        ],
       },
     }),
   ],

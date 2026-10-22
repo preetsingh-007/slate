@@ -19,7 +19,9 @@ src/
 │   ├── library/          PDF and EPUB ingest, clippings, annotations
 │   └── locators/         source links and re-anchoring
 ├── app/services.ts       long-lived services shared through React context
-└── ui/                   React components by area (app, canvas, library, gym, sync, panes)
+├── test/                 test fixtures; network.test.ts (the network-use NFR, statically)
+└── ui/                   React components by area (app, canvas, library, gym, sync, panes);
+                          ui/common holds shared parts (registries, toasts, focus, page hide)
 worker/                   Cloudflare Worker fetch helper
 tests/e2e/                Playwright tests; tests/e2e/server.mjs serves fixtures and a mocked GitHub API
 tests/gym/check.py        copy of gym's checker, run on app output (npm run test:gym)
@@ -79,7 +81,7 @@ Books (PDF, EPUB) and clippings open in the side pane (`src/ui/library/`); the l
 
 - Book files are stored by SHA-256 in the asset store; a book synced without its file asks for it and matches the re-imported file by hash. Annotations live in `ann:<item id>`; PDF ink is stored in units of the page width.
 - Clippings are read-only after creation. New from link goes through the fetch helper only: Readability gives the Reader view; the snapshot (HTML plus images, stylesheets, their `url()` resources and scripts, stored as `assets/<hash>.<ext>`) gives the Original view.
-- Snapshots render only in `public/snapshot.html`, loaded with `sandbox="allow-scripts"` (never `allow-same-origin`) and fed over `postMessage`. Its own CSP allows no network and only its bootstrap script (by hash) and `blob:` scripts; after editing that script run `node scripts/snapshot-csp.mjs`.
+- Snapshots render only in the page `public/snapshot.html`, in a frame with `sandbox="allow-scripts"` (never `allow-same-origin`), fed over `postMessage`. The app reads that page (from the service worker's precache) and gives it to the frame as `srcdoc`: a sandboxed frame is never served by the service worker, so loading it by URL would fail offline. Its own CSP allows no network and only its bootstrap script (by hash) and `blob:` scripts; as a srcdoc document it is also under the app's CSP, which `vite.config.ts` extends with that hash (read from the file) and `blob:`. After editing the script run `node scripts/snapshot-csp.mjs`.
 - Text-quote anchors (highlights, notes, clip source links) are offsets into the text walk of `documentText` (`core/library/snapshot.ts`), which the viewers and the snapshot frame share.
 
 ## Panes and sources
@@ -92,3 +94,16 @@ Books (PDF, EPUB) and clippings open in the side pane (`src/ui/library/`); the l
 - Source links (S6): `registerSourceOpener(type, …)` per area (`book`, `clipping`: library; `gym`: gym; `canvas`: `ui/canvas/register.tsx`). Openers open the source in the side pane, wait for its content (downloading it if needed) and flash the location for 2 s.
 - `canvasApi(slug)` returns the main pane's view of a canvas when it has one, else the side pane's.
 - `tests/e2e/sources.spec.ts` is the Milestone 4 gate: every source type, lassoed onto the real canvas and back through the clip's badge, online and offline.
+
+## Non-functional requirements
+
+How the code meets the PRD's NFR table, and where each is tested (`tests/e2e/nfr-*.spec.ts` log what they measure, prefixed `[nfr]`).
+
+- **Ink latency.** The engine draws the wet stroke (with predicted points) in the animation frame after each pointer event and adds the stroke to the in-memory CRDT on pen-up; persistence is batched later by the DocStore. `nfr-perf.spec.ts` measures move-to-frame latency with IndexedDB writes that never finish.
+- **Canvas speed.** Tiled ink, a spatial index and segment loading as the view arrives (`CanvasView` asks for months on every camera frame; the check is cheap). `DocStore.load` applies a document's update log row by row in one transaction, 2–3 times faster than merging it first. Budgets: `canvas-perf.spec.ts` (50,000 strokes) and `nfr-perf.spec.ts` (a 12,000-object month opens in under 1 s). The performance specs run in their own Playwright project (`perf`) after the others.
+- **Durability.** Updates reach IndexedDB about 60 ms after a change. When the page is hidden or unloaded, work still held by the UI is written and `DocStore.flushNow()` creates every pending write's transaction at once, outside the write chain (the tab may get no later turn of the event loop): the engine commits a stroke whose pen is still down, PDF ink likewise, a margin note or a to-do being typed is saved (`ui/common/pageHide.ts`). Text boxes write to their `Y.Text` on every keystroke. `nfr-durability.spec.ts` closes the tab mid-stroke and mid-sentence.
+- **Offline and PWA.** The service worker (vite-plugin-pwa, `vite.config.ts`) precaches the app, KaTeX's fonts, `snapshot.html` and all of pdf.js's CMaps, standard fonts, wasm decoders and ICC profiles. Paths go through `import.meta.env.BASE_URL`, so the app works under `/<repository>/` on GitHub Pages. `nfr-offline.spec.ts` serves the bundle from a server it stops (Playwright's offline mode does not reach service workers) and builds with `--base=/slate/` to check the manifest, icons, scope and offline start there.
+- **Web content isolation.** Snapshot frames as above; clipboard and page HTML go through DOMPurify on an inert document (`core/html/toMarkdown.ts`), EPUB chapters through an allowlist sanitizer (`core/library/sanitize.ts`); rendered Markdown never loads images from other sites (they become links). The app's CSP is in `vite.config.ts`.
+- **Network use and secrets.** Only `core/sync/git/github.ts` and `lfs.ts` (GitHub), `core/library/helper.ts` (the fetch helper, given only the page URL) and `core/citations/http.ts` (always through the helper) reach the network; `src/test/network.test.ts` lists every web address and call site in the app code, and `nfr-network.spec.ts` records the requests of a whole workflow. The token is kept in IndexedDB (`kv secrets`) and sent only to the gym repository's API paths.
+- **Accessibility.** Controls are labelled (audited from Chromium's accessibility tree in `a11y.spec.ts`). Menus, popovers and dialogs use `ui/common/focus.tsx`: focus moves in, menus take arrow keys, modals keep Tab inside, Escape closes, focus returns to the opener. The canvas leaves Enter, Space and arrows to a focused control. Keyboard alternatives to pointer gestures: tool keys, Enter for a text box, Alt(+Shift)+arrows to select, Tab to the selection's actions, and a keyboard rectangle in every source lasso (`ui/sources/LassoOverlay.tsx`). `src/ui/styles/contrast.test.ts` computes WCAG contrast for the theme tokens in both themes; flashes and transitions respect reduced motion. `iphone.spec.ts` checks the iPhone scope at 390 × 844.
+

@@ -26,7 +26,7 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar" role="toolbar" aria-label="App">
-        <span className="title">Slate</span>
+        <span className="title hide-phone">Slate</span>
         <CanvasSwitcher />
         <LibraryButtons />
         <span className="spacer" />

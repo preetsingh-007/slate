@@ -3,6 +3,12 @@
  * (public/snapshot.html) has its own CSP with no network; it is loaded with
  * `sandbox="allow-scripts"` and never `allow-same-origin`, so the saved page cannot reach the
  * app's storage. Everything goes over postMessage, checked against the frame's window.
+ *
+ * Offline NFR: the page is given to the frame as `srcdoc`, not by URL. A sandboxed frame without
+ * allow-same-origin is never served by the service worker, so loading it by URL fails once the
+ * app has restarted offline. The app reads the page through the service worker (precached) and
+ * the frame needs no request at all. A srcdoc frame is under the app's CSP as well as its own,
+ * so vite.config.ts allows the frame's bootstrap script (by hash) and its blob: resources.
  */
 import { useEffect, useRef, useState } from 'react';
 import { useStylusNoScroll } from '../viewerParts';
@@ -52,9 +58,26 @@ interface Props {
 
 let reqId = 1;
 
+let framePage: Promise<string> | null = null;
+/** The frame page's HTML, read once (from the service worker's precache when offline). */
+export function loadFramePage(): Promise<string> {
+  framePage ??= fetch(`${import.meta.env.BASE_URL}snapshot.html`)
+    .then((r) => {
+      if (!r.ok) throw new Error(`snapshot.html: HTTP ${r.status}`);
+      return r.text();
+    })
+    .catch((err) => {
+      framePage = null; // try again next time
+      throw err;
+    });
+  return framePage;
+}
+
 export function SnapshotFrame(p: Props) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [ready, setReady] = useState(false);
+  const [page, setPage] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
   const pending = useRef(new Map<number, (v: FrameCapture | null) => void>());
   const textWaiters = useRef<((t: string) => void)[]>([]);
   const cb = useRef(p);
@@ -113,6 +136,17 @@ export function SnapshotFrame(p: Props) {
     return () => window.removeEventListener('message', on);
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    loadFramePage().then(
+      (html) => alive && setPage(html),
+      () => alive && setFailed(true),
+    );
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   // decorations follow the annotations
   useEffect(() => {
     if (ready) send(decorateMessage(p.highlights, p.marks));
@@ -140,10 +174,12 @@ export function SnapshotFrame(p: Props) {
 
   return (
     <div className="snapshot-host">
+      {failed && <p className="empty">The Original view could not be opened. Reload Slate while online once to make it available offline.</p>}
       <iframe
         ref={frame}
         className="snapshot-frame"
-        src={`${import.meta.env.BASE_URL}snapshot.html`}
+        srcDoc={page ?? undefined}
+        hidden={!page}
         sandbox="allow-scripts"
         referrerPolicy="no-referrer"
         title="Saved page (Original view)"

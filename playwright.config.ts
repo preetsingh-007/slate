@@ -9,6 +9,9 @@ const appPort = Number(process.env.SLATE_E2E_APP_PORT ?? 4173);
 const apiPort = Number(process.env.SLATE_E2E_API_PORT ?? 4455);
 process.env.SLATE_E2E_API = `http://localhost:${apiPort}`;
 
+/** Timing budgets: run in their own project, after the others. */
+const PERF = /(canvas-perf|nfr-perf)\.spec\.ts$/;
+
 export default defineConfig({
   testDir: 'tests/e2e',
   timeout: 60_000,
@@ -22,11 +25,21 @@ export default defineConfig({
     launchOptions: { executablePath },
   },
   projects: [
-    { name: 'desktop', use: { ...devices['Desktop Chrome'], launchOptions: { executablePath } } },
+    { name: 'desktop', use: { ...devices['Desktop Chrome'], launchOptions: { executablePath } }, testIgnore: PERF },
     {
       name: 'tablet',
       use: { ...devices['iPad Pro 11'], browserName: 'chromium', hasTouch: true, launchOptions: { executablePath } },
       grep: /@touch/,
+      testIgnore: PERF,
+    },
+    {
+      // performance budgets (C3 and the NFRs) run once the rest is done, one file per worker,
+      // so their timings are not measured while three other browsers compete for the CPU
+      name: 'perf',
+      use: { ...devices['Desktop Chrome'], launchOptions: { executablePath } },
+      testMatch: PERF,
+      fullyParallel: false,
+      dependencies: ['desktop', 'tablet'],
     },
   ],
   webServer: [

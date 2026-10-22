@@ -21,6 +21,7 @@ import { addDays, dayLabel, isoDate } from '../../core/util/time';
 import { useApp } from '../app/store';
 import { canvasApi } from '../common/registries';
 import { toast } from '../common/toast';
+import { usePageHide } from '../common/pageHide';
 import type { PaneProps } from '../panes/registry';
 import { isNarrow } from './open';
 import { canvasTodoIndexFor } from './useGym';
@@ -95,6 +96,12 @@ function Checklist() {
   // the item (input, or its reorder handle) to focus after the next render
   const [focus, setFocus] = useState<{ index: number; handle?: boolean } | null>(null);
   const [draft, setDraft] = useState('');
+  // Durability NFR: a to-do typed but not yet entered is added when the page goes away
+  usePageHide(() => {
+    if (!t || !draft.trim()) return;
+    addItem(t, draft.trim());
+    setDraft('');
+  });
   const [drag, setDrag] = useState<Drag | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const newRef = useRef<HTMLInputElement>(null);

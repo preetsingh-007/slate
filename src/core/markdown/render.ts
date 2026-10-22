@@ -112,7 +112,10 @@ marked.use({
     image({ href, title, text }) {
       const alt = escapeHtml(text);
       const t = title ? ` title="${escapeHtml(title)}"` : '';
-      if (/^(https?:|data:image\/|blob:)/i.test(href)) return `<img src="${escapeHtml(href)}" alt="${alt}"${t} loading="lazy">`;
+      if (/^(data:image\/|blob:)/i.test(href)) return `<img src="${escapeHtml(href)}" alt="${alt}"${t}>`;
+      // Network use NFR: the app contacts only GitHub and the fetch helper, so a remote image
+      // is a link the reader can open in the browser, never loaded by the app
+      if (isRemote(href)) return `<a class="md-remote-image" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer"${t}>[image${alt ? `: ${alt}` : ''}]</a>`;
       if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return `<span>${alt}</span>`;
       return `<img data-rel-src="${escapeHtml(href)}" alt="${alt}"${t}>`;
     },
@@ -137,6 +140,8 @@ marked.use({
 
 /** Carries a heading's anchor through sanitising. */
 const HEADING_ID = 'data-slate-heading-id';
+/** An absolute or protocol-relative web URL (another site). */
+const isRemote = (url: string) => /^\s*(https?:)?\/\//i.test(url);
 
 let purifyReady = false;
 /**
@@ -154,11 +159,22 @@ function purify(html: string): string {
         node.removeAttribute(HEADING_ID);
         if (/^H[1-6]$/.test(node.tagName)) node.setAttribute('id', id);
       }
+      // Network use NFR: raw HTML may point images, media or backgrounds at other sites; the
+      // app loads none of them (the CSP would block them too)
+      for (const a of ['src', 'srcset', 'poster', 'background']) {
+        const v = node.getAttribute(a);
+        if (v && (isRemote(v) || (a === 'srcset' && /(^|[\s,])(https?:)?\/\//i.test(v)))) {
+          node.removeAttribute(a);
+          if (a === 'src') node.setAttribute('data-remote-src', v);
+        }
+      }
+      const style = node.getAttribute('style');
+      if (style && /url\(\s*['"]?\s*(https?:)?\/\//i.test(style)) node.setAttribute('style', style.replace(/url\(\s*['"]?\s*(https?:)?\/\/[^)]*\)/gi, 'none'));
     });
     purifyReady = true;
   }
   return DOMPurify.sanitize(html, {
-    ADD_ATTR: ['target', 'data-i', 'data-task', 'data-rel', 'data-rel-src', 'data-anchor', 'aria-hidden', 'encoding'],
+    ADD_ATTR: ['target', 'data-remote-src', 'data-i', 'data-task', 'data-rel', 'data-rel-src', 'data-anchor', 'aria-hidden', 'encoding'],
     ADD_TAGS: ['semantics', 'annotation'],
   });
 }
