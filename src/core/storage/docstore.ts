@@ -56,6 +56,8 @@ export class DocStore {
   private appendCounts = new Map<string, number>();
   /** R1: updates saved by another tab reach this tab's open documents and change tracking */
   private channel: BroadcastChannel | null;
+  /** callers of `whenSaved`, per document */
+  private saveWaiters = new Map<string, (() => void)[]>();
 
   constructor(
     readonly db: SlateDB,
@@ -222,6 +224,33 @@ export class DocStore {
 
   // ---------- persistence ----------
 
+  /** Whether every change of `docId` made so far is in IndexedDB (nothing buffered or in flight). */
+  isSaved(docId: string): boolean {
+    return !this.pending.has(docId) && !this.inflight.has(docId);
+  }
+
+  /**
+   * Durability NFR: resolves once every change of `docId` made before the call is in IndexedDB.
+   * Drafts of work in progress (ui/common/drafts.ts) are cleared only then. Later changes may
+   * delay it (it waits for a moment with nothing unsaved); a failed write waits for its retry.
+   */
+  whenSaved(docId: string): Promise<void> {
+    if (this.isSaved(docId)) return Promise.resolve();
+    return new Promise((resolve) => {
+      const list = this.saveWaiters.get(docId);
+      if (list) list.push(resolve);
+      else this.saveWaiters.set(docId, [resolve]);
+    });
+  }
+
+  /** A write of `docId` settled: wake `whenSaved` callers if nothing of it is unsaved now. */
+  private wroteDoc(docId: string) {
+    const list = this.saveWaiters.get(docId);
+    if (!list || !this.isSaved(docId)) return;
+    this.saveWaiters.delete(docId);
+    for (const r of list) r();
+  }
+
   private enqueue(docId: string, update: Uint8Array) {
     const list = this.pending.get(docId);
     if (list) list.push(update);
@@ -254,12 +283,15 @@ export class DocStore {
           const pend = this.pending.get(docId);
           this.pending.set(docId, pend ? [merged, ...pend] : [merged]);
           this.onError.emit(err as Error);
+          // retried like any write (the page may stay open after all)
+          if (!this.flushTimer) this.flushTimer = setTimeout(() => void this.flush(), 500);
         })
         .finally(() => {
           const l = this.inflight.get(docId);
           const i = l?.indexOf(updates) ?? -1;
           if (l && i >= 0) l.splice(i, 1);
           if (l && !l.length) this.inflight.delete(docId);
+          this.wroteDoc(docId);
         });
     });
     const all = Promise.all(writes);
@@ -287,6 +319,7 @@ export class DocStore {
       const i = list.indexOf(updates);
       if (i >= 0) list.splice(i, 1);
       if (!list.length) this.inflight.delete(docId);
+      this.wroteDoc(docId);
     };
     this.writeChain = this.writeChain.then(async () => {
       let failed: Error | null = null;
