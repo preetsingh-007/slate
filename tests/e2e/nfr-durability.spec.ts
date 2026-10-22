@@ -1,7 +1,12 @@
 /**
  * Durability NFR: a change is on disk within 1 s; a crash or closed tab loses nothing drawn or
  * typed, including a stroke whose pen has not lifted and text still being typed when the tab
- * closes (pagehide).
+ * closes.
+ *
+ * A closing page may get no time to finish IndexedDB writes (CI's headless Chromium never does;
+ * iPad Safari suspends or kills a PWA): before closing, these tests make every later IndexedDB
+ * write hang, so what comes back can only come from the drafts the UI keeps in localStorage
+ * while work is in progress (ui/common/drafts.ts), recovered on the next start.
  */
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { makePaperPdf } from '../../src/test/fixtures';
@@ -21,8 +26,28 @@ const storedBytes = (page: Page, docId: string) =>
     return (await s.db.getUpdates(id)).reduce((n, r) => n + r.data.length, 0);
   }, docId);
 
-/** Closes the tab the way a person does (pagehide runs, nothing else), and opens a fresh one. */
+/** Drafts of work in progress left in localStorage (cleared once recovered work is on disk). */
+const draftKeys = (page: Page) => page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('slate-draft:')));
+
+/**
+ * From now on nothing more reaches IndexedDB in this page: document writes and new connections
+ * hang, as at a close that leaves the page no time. Work already committed is written first.
+ */
+async function loseWritesFromNow(page: Page) {
+  await page.evaluate(async () => {
+    const s = (window as unknown as { __slate: { docs: { flush(): Promise<unknown> }; db: { putUpdate(id: string, data: Uint8Array): Promise<void> } } }).__slate;
+    await s.docs.flush();
+    s.db.putUpdate = () => new Promise<void>(() => {});
+    indexedDB.open = () => new EventTarget() as IDBOpenDBRequest;
+  });
+}
+
+/**
+ * Closes the tab the way a person does (pagehide runs, nothing else) after its last IndexedDB
+ * writes are made to hang, and opens a fresh one.
+ */
 async function closeAndReopen(page: Page, context: BrowserContext): Promise<Page> {
+  await loseWritesFromNow(page);
   await page.close();
   // a person reopens the app after a moment; reopening within milliseconds can read the
   // database before the closed page's last transaction has committed
@@ -74,6 +99,7 @@ test.describe('durability (NFR)', () => {
     const strokes = objs.filter((o) => o.kind === 'stroke');
     expect(strokes).toHaveLength(1);
     expect(strokes[0].pts!.length / 3).toBeGreaterThanOrEqual(8);
+    await expect.poll(() => draftKeys(next)).toEqual([]);
   });
 
   test('closing the tab keeps PDF ink being drawn, a margin note and a to-do being typed', async ({ page, context }) => {
@@ -112,5 +138,6 @@ test.describe('durability (NFR)', () => {
       return d.getText('checklist').toString();
     });
     expect(text).toBe('- [ ] Buy chalk\n');
+    await expect.poll(() => draftKeys(third)).toEqual([]);
   });
 });
