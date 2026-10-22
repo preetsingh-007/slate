@@ -640,6 +640,7 @@ function ClippingView({ meta, content }: { meta: ClippingMeta; content: Clipping
         <NoteEditor
           anchor={noteEdit.anchor}
           initial={noteEdit.a.text ?? ''}
+          draft={{ item: meta.id, annotation: noteEdit.a }}
           quote={noteEdit.a.locator.type === 'clipping' ? noteEdit.a.locator.quote.exact : undefined}
           onClose={() => setNoteEdit(null)}
           onSave={(text) => {

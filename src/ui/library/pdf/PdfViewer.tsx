@@ -19,6 +19,8 @@ import { LibraryTextIndex } from '../../../core/library/textIndex';
 import { uid } from '../../../core/util/ids';
 import { useServices } from '../../../app/services';
 import { toast } from '../../common/toast';
+import { draftKey, removeDraft, settleDraft, writeDraft } from '../../common/drafts';
+import { annotationsDocId } from '../../../core/stores/docIds';
 import type { LassoResult } from '../../sources/LassoOverlay';
 import { useAnnotations, useClipRefs, useKeepScroll, useLocalPref, useSettingsVersion } from '../hooks';
 import { useLibraryUi } from '../state';
@@ -60,18 +62,23 @@ export function PdfViewer({ book, onMissing }: { book: BookMeta; onMissing(): vo
   const { doc: annDoc, list: annotations } = useAnnotations(book.id);
   // L4/durability: ink or highlights made in the moment before the annotation document has
   // opened are kept here and saved as soon as it is ready, never dropped
-  const pendingAnn = useRef<Annotation[]>([]);
+  const pendingAnn = useRef<{ a: Annotation; draft?: string }[]>([]);
+  /** Saves an annotation; `draft` is the key of its draft, cleared once it is on disk. */
   const saveAnnotation = useCallback(
-    (a: Annotation) => {
-      if (annDoc) putAnnotation(annDoc, a);
-      else pendingAnn.current.push(a);
+    (a: Annotation, draft?: string) => {
+      if (!annDoc) return void pendingAnn.current.push({ a, draft });
+      putAnnotation(annDoc, a);
+      if (draft) settleDraft(services.docs, draft, annotationsDocId(book.id));
     },
-    [annDoc],
+    [annDoc, services.docs, book.id],
   );
   useEffect(() => {
     if (!annDoc || !pendingAnn.current.length) return;
-    for (const a of pendingAnn.current.splice(0)) putAnnotation(annDoc, a);
-  }, [annDoc]);
+    for (const { a, draft } of pendingAnn.current.splice(0)) {
+      putAnnotation(annDoc, a);
+      if (draft) settleDraft(services.docs, draft, annotationsDocId(book.id));
+    }
+  }, [annDoc, services.docs, book.id]);
   const clipRefs = useClipRefs(book.id);
   const jump = useLibraryUi((s) => s.jumps[book.id]);
 
@@ -355,16 +362,45 @@ export function PdfViewer({ book, onMissing }: { book: BookMeta; onMissing(): vo
   const inkMode: InkMode = tool === 'pen' || tool === 'highlighter' ? 'draw' : tool === 'eraser' ? 'erase' : tool === 'note' ? 'note' : null;
   const fingerDrawing = settings.getPrefs().fingerDrawing;
 
-  const onStroke = useCallback(
+  const inkAnnotation = useCallback(
     (pageN: number, pts: number[]) => {
       const b = inkBounds(pts, inkStyle.size);
       const s = sizes.get(pageN) ?? baseSize;
       const aspect = s ? s.w / s.h : 1;
       // region normalised to the page (y in page heights)
       const region = { x: b.x, y: b.y * aspect, w: b.w, h: b.h * aspect };
-      saveAnnotation(newAnnotation('ink', { type: 'pdf', page: pageN, region, quote: '' }, { color: inkStyle.color, strokes: [{ pts, color: inkStyle.color, size: inkStyle.size, tool: inkStyle.tool }] }));
+      return newAnnotation('ink', { type: 'pdf', page: pageN, region, quote: '' }, { color: inkStyle.color, strokes: [{ pts, color: inkStyle.color, size: inkStyle.size, tool: inkStyle.tool }] });
     },
-    [saveAnnotation, inkStyle, sizes, baseSize],
+    [inkStyle, sizes, baseSize],
+  );
+  // Durability NFR: the ink being drawn has a draft (and its future id) from its first points
+  const inkDraft = useRef<{ id: string; created: number } | null>(null);
+  const writeInkDraft = useCallback(
+    (pageN: number, pts: number[]) => {
+      const at = (inkDraft.current ??= { id: uid(), created: Date.now() });
+      const a: Annotation = { ...inkAnnotation(pageN, pts), id: at.id, created: at.created };
+      const key = draftKey('ink', a.id);
+      writeDraft(key, { kind: 'ink', item: book.id, annotation: a });
+      return { a, key };
+    },
+    [inkAnnotation, book.id],
+  );
+  const onInkDraft = useCallback(
+    (pageN: number, pts: number[] | null) => {
+      if (pts) return void writeInkDraft(pageN, pts);
+      if (inkDraft.current) removeDraft(draftKey('ink', inkDraft.current.id));
+      inkDraft.current = null;
+    },
+    [writeInkDraft],
+  );
+  const onStroke = useCallback(
+    (pageN: number, pts: number[]) => {
+      // the draft holds the whole stroke until the annotation is on disk
+      const { a, key } = writeInkDraft(pageN, pts);
+      inkDraft.current = null;
+      saveAnnotation(a, key);
+    },
+    [saveAnnotation, writeInkDraft],
   );
   const onErase = useCallback((ids: string[]) => annDoc && ids.forEach((id) => removeAnnotation(annDoc, id)), [annDoc]);
   const onNoteAt = useCallback(
@@ -628,6 +664,7 @@ export function PdfViewer({ book, onMissing }: { book: BookMeta; onMissing(): vo
                   search={activeQuery}
                   onSize={reportSize}
                   onStroke={onStroke}
+                  onInkDraft={onInkDraft}
                   onErase={onErase}
                   onNoteAt={onNoteAt}
                   onOpenNote={onOpenNote}
@@ -683,6 +720,7 @@ export function PdfViewer({ book, onMissing }: { book: BookMeta; onMissing(): vo
         <NoteEditor
           anchor={noteEdit.anchor}
           initial={noteEdit.a.text ?? ''}
+          draft={{ item: book.id, annotation: noteEdit.a }}
           quote={noteEdit.a.locator.type === 'pdf' ? noteEdit.a.locator.quote : undefined}
           onClose={() => setNoteEdit(null)}
           onSave={(text) => {

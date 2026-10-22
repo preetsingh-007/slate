@@ -2,9 +2,13 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { Copy, Highlighter, StickyNote, Trash2, X } from 'lucide-react';
-import { HIGHLIGHT_COLORS } from '../../core/library/annotations';
+import type { Annotation } from '../../core/model/types';
+import { HIGHLIGHT_COLORS, annotationsMap } from '../../core/library/annotations';
+import { annotationsDocId } from '../../core/stores/docIds';
+import { useServices } from '../../app/services';
 import { LassoOverlay, type LassoMode, type LassoResult } from '../sources/LassoOverlay';
 import { usePageHide } from '../common/pageHide';
+import { draftKey, removeDraft, settleDraft, writeDraft } from '../common/drafts';
 import { usePopupFocus } from '../common/focus';
 
 /**
@@ -139,28 +143,56 @@ export function NoteEditor({
   onDelete,
   onDiscard,
   onClose,
+  draft,
 }: {
   anchor: DOMRect;
   initial: string;
   quote?: string;
+  /**
+   * Durability NFR: the note's book or clipping and the annotation `onSave` saves. The text
+   * being typed is then kept as a draft (localStorage, on every change) until it is on disk.
+   */
+  draft?: { item: string; annotation: Annotation };
   onSave(text: string): void;
   onDelete?(): void;
   /** Cancel on a new note: removes what was saved while typing */
   onDiscard?(): void;
   onClose(): void;
 }) {
+  const { docs } = useServices();
   const [text, setText] = useState(initial);
   const area = useRef<HTMLTextAreaElement>(null);
+  const key = draft ? draftKey('note', draft.annotation.id) : null;
+  const keepDraft = (value: string) => {
+    if (!key || !draft) return;
+    const t = value.trim();
+    if (!t || t === initial.trim()) removeDraft(key);
+    else writeDraft(key, { kind: 'note', item: draft.item, annotation: { ...draft.annotation, text: t } });
+  };
+  const dropDraft = () => key && removeDraft(key);
+  /** Saves `t` and clears its draft once the note is on disk with that text. */
+  const commit = (t: string) => {
+    onSave(t);
+    if (!key || !draft) return;
+    const docId = annotationsDocId(draft.item);
+    const id = draft.annotation.id;
+    settleDraft(docs, key, docId, () => {
+      const doc = docs.getLoaded(docId);
+      return !!doc && annotationsMap(doc).get(id)?.text === t;
+    });
+  };
   useEffect(() => area.current?.focus(), []);
   // Durability NFR: a note being typed when the page goes away is kept (saving is idempotent:
   // the annotation keeps its id)
   usePageHide(() => {
-    if (text.trim() && text.trim() !== initial.trim()) onSave(text.trim());
+    if (!text.trim() || text.trim() === initial.trim()) return;
+    keepDraft(text);
+    commit(text.trim());
   });
   // and saved while typing, so keeping it never depends on winning the race at page close
   const saved = useRef(initial.trim());
-  const latestSave = useRef(onSave);
-  latestSave.current = onSave;
+  const latestSave = useRef(commit);
+  latestSave.current = commit;
   useEffect(() => {
     const t = text.trim();
     if (!t || t === saved.current) return;
@@ -171,7 +203,7 @@ export function NoteEditor({
     return () => clearTimeout(timer);
   }, [text]);
   const save = () => {
-    onSave(text.trim());
+    commit(text.trim());
     onClose();
   };
   return (
@@ -184,7 +216,10 @@ export function NoteEditor({
           value={text}
           rows={4}
           placeholder="Write a note…"
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            keepDraft(e.target.value);
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save();
           }}
@@ -194,6 +229,7 @@ export function NoteEditor({
             <button
               className="btn danger"
               onClick={() => {
+                dropDraft();
                 onDelete();
                 onClose();
               }}
@@ -207,6 +243,7 @@ export function NoteEditor({
             onClick={() => {
               // a new note was saved while typing; Cancel means it should not exist
               if (onDiscard && saved.current !== initial.trim()) onDiscard();
+              dropDraft();
               onClose();
             }}
             aria-label="Cancel"

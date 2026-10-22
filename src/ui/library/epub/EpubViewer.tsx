@@ -539,6 +539,7 @@ export function EpubViewer({ book: meta, onMissing }: { book: BookMeta; onMissin
         <NoteEditor
           anchor={noteEdit.anchor}
           initial={noteEdit.a.text ?? ''}
+          draft={{ item: meta.id, annotation: noteEdit.a }}
           quote={noteEdit.a.locator.type === 'epub' ? noteEdit.a.locator.quote.exact : undefined}
           onClose={() => setNoteEdit(null)}
           onSave={(text) => {

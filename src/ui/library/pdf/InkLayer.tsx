@@ -7,11 +7,12 @@
  * is a touch with touchType "stylus": its touchmove is cancelled so it draws instead of
  * scrolling.
  */
-import { memo, useEffect, useRef } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import type { Annotation, StrokeTool } from '../../../core/model/types';
 import { HIGHLIGHTER_ALPHA, resolveInkColor, strokeToPath2D } from '../../../core/ink/render';
 import { PointSmoother, PressureSimulator } from '../../../core/ink/smoothing';
 import { usePageHide } from '../../common/pageHide';
+import { EAGER_DRAFT_POINTS, draftThrottle } from '../../common/drafts';
 
 export interface InkStyle {
   tool: StrokeTool;
@@ -30,6 +31,11 @@ interface Props {
   style: InkStyle;
   fingerDrawing: boolean;
   onStroke(pts: number[]): void;
+  /**
+   * Durability NFR: the stroke being drawn so far (page-normalised, as `onStroke` gets it),
+   * reported about every 150 ms and at page hide; null when it is cancelled.
+   */
+  onDraft?(pts: number[] | null): void;
   /** eraser touched these ink annotations */
   onErase(ids: string[]): void;
   /** note tool tapped at a normalised point */
@@ -39,7 +45,7 @@ interface Props {
 /** PDF pages stay white in dark mode, so the default ink colour is always dark there. */
 const PAGE_INK = '#1f2328';
 
-export const InkLayer = memo(function InkLayer({ width, height, annotations, mode, style, fingerDrawing, onStroke, onErase, onNote }: Props) {
+export const InkLayer = memo(function InkLayer({ width, height, annotations, mode, style, fingerDrawing, onStroke, onDraft, onErase, onNote }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const wet = useRef<HTMLCanvasElement>(null);
   const overlay = useRef<HTMLDivElement>(null);
@@ -80,6 +86,18 @@ export const InkLayer = memo(function InkLayer({ width, height, annotations, mod
   }, [mode]);
 
   const drawing = useRef<{ id: number; pts: number[]; smoother: PointSmoother; pressure: PressureSimulator; real: boolean } | null>(null);
+  // page-normalised: x and y in units of the page width
+  const normalise = (pts: number[]) => {
+    const norm: number[] = [];
+    for (let i = 0; i + 2 < pts.length; i += 3) norm.push(round(pts[i] / width), round(pts[i + 1] / width), Math.round(pts[i + 2] * 100) / 100);
+    return norm;
+  };
+  const latestDraft = useRef<() => void>(() => {});
+  latestDraft.current = () => {
+    const d = drawing.current;
+    if (d && mode === 'draw' && d.pts.length >= 3) onDraft?.(normalise(d.pts));
+  };
+  const [draft] = useState(() => draftThrottle(() => latestDraft.current(), { eager: () => (drawing.current?.pts.length ?? 0) <= 3 * EAGER_DRAFT_POINTS }));
 
   const local = (e: { clientX: number; clientY: number }) => {
     const r = overlay.current!.getBoundingClientRect();
@@ -124,13 +142,12 @@ export const InkLayer = memo(function InkLayer({ width, height, annotations, mod
   /** Ends a stroke: clears the wet layer and stores the ink drawn so far. */
   const finish = (d: NonNullable<typeof drawing.current>) => {
     drawing.current = null;
+    draft.cancel();
     const c = wet.current;
     c?.getContext('2d')?.clearRect(0, 0, c.width, c.height);
-    if (mode !== 'draw' || d.pts.length < 3) return;
-    // page-normalised: x and y in units of the page width
-    const norm: number[] = [];
-    for (let i = 0; i + 2 < d.pts.length; i += 3) norm.push(round(d.pts[i] / width), round(d.pts[i + 1] / width), Math.round(d.pts[i + 2] * 100) / 100);
-    onStroke(norm);
+    if (mode !== 'draw') return;
+    if (d.pts.length < 3) return onDraft?.(null);
+    onStroke(normalise(d.pts));
   };
   // Durability NFR: a stroke still being drawn when the page goes away is kept
   usePageHide(() => {
@@ -170,6 +187,7 @@ export const InkLayer = memo(function InkLayer({ width, height, annotations, mod
           d.pts.push(x, y, real ? e.pressure : d.pressure.next(x, y, e.timeStamp));
           drawing.current = d;
           paintWet();
+          draft.schedule();
         }}
         onPointerMove={(e) => {
           const d = drawing.current;
@@ -184,7 +202,10 @@ export const InkLayer = memo(function InkLayer({ width, height, annotations, mod
             const [x, y] = e.pointerType === 'pen' ? [p.x, p.y] : d.smoother.filter(p.x, p.y, ev.timeStamp);
             d.pts.push(x, y, d.real ? ev.pressure : d.pressure.next(x, y, ev.timeStamp));
           }
-          if (mode === 'draw') paintWet();
+          if (mode === 'draw') {
+            paintWet();
+            draft.schedule();
+          }
         }}
         onPointerUp={(e) => {
           const d = drawing.current;
@@ -192,6 +213,8 @@ export const InkLayer = memo(function InkLayer({ width, height, annotations, mod
           finish(d);
         }}
         onPointerCancel={() => {
+          if (drawing.current && mode === 'draw') onDraft?.(null);
+          draft.cancel();
           drawing.current = null;
           const c = wet.current;
           c?.getContext('2d')?.clearRect(0, 0, c.width, c.height);

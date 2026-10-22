@@ -22,6 +22,8 @@ import { useApp } from '../app/store';
 import { canvasApi } from '../common/registries';
 import { toast } from '../common/toast';
 import { usePageHide } from '../common/pageHide';
+import { draftKey, removeDraft, settleDraft, writeDraft } from '../common/drafts';
+import { uid } from '../../core/util/ids';
 import type { PaneProps } from '../panes/registry';
 import { isNarrow } from './open';
 import { canvasTodoIndexFor } from './useGym';
@@ -95,12 +97,30 @@ function Checklist() {
   const done = items.filter((i) => i.checked);
   // the item (input, or its reorder handle) to focus after the next render
   const [focus, setFocus] = useState<{ index: number; handle?: boolean } | null>(null);
+  const { docs } = useServices();
   const [draft, setDraft] = useState('');
-  // Durability NFR: a to-do typed but not yet entered is added when the page goes away
-  usePageHide(() => {
-    if (!t || !draft.trim()) return;
-    addItem(t, draft.trim());
+  // Durability NFR: the to-do being typed is kept as a draft (localStorage, on every change)
+  // until it is entered and on disk; each new to-do gets its own draft
+  const draftId = useRef(uid());
+  const keepDraft = (value: string) => {
+    const key = draftKey('todo', draftId.current);
+    if (value.trim()) writeDraft(key, { kind: 'todo', text: value, committed: false, created: Date.now() });
+    else removeDraft(key);
+  };
+  /** Adds the typed to-do; its draft says so first, so recovery never adds it twice. */
+  const enter = (checklist: Y.Text) => {
+    const text = draft.trim();
+    if (!text) return;
+    const key = draftKey('todo', draftId.current);
+    writeDraft(key, { kind: 'todo', text, committed: true, created: Date.now() });
+    addItem(checklist, text);
+    settleDraft(docs, key, TODO_DOC_ID);
+    draftId.current = uid();
     setDraft('');
+  };
+  // a to-do typed but not yet entered is added when the page goes away
+  usePageHide(() => {
+    if (t) enter(t);
   });
   const [drag, setDrag] = useState<Drag | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -264,12 +284,14 @@ function Checklist() {
           placeholder="Add a to-do"
           aria-label="Add a to-do"
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            keepDraft(e.target.value);
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.nativeEvent.isComposing && draft.trim()) {
               e.preventDefault();
-              addItem(t, draft.trim());
-              setDraft('');
+              enter(t);
             } else if (e.key === 'ArrowUp' && open.length) {
               e.preventDefault();
               setFocus({ index: open[open.length - 1].index });

@@ -28,6 +28,8 @@ export interface PageProps {
   search: string;
   onSize(n: number, w: number, h: number): void;
   onStroke(page: number, pts: number[]): void;
+  /** Durability NFR: ink being drawn on this page (see InkLayer) */
+  onInkDraft(page: number, pts: number[] | null): void;
   onErase(ids: string[]): void;
   onNoteAt(page: number, x: number, y: number, anchor: DOMRect): void;
   onOpenNote(a: Annotation, anchor: DOMRect): void;
@@ -178,6 +180,7 @@ export const PdfPage = memo(function PdfPage(p: PageProps) {
         style={p.inkStyle}
         fingerDrawing={p.fingerDrawing}
         onStroke={(pts) => p.onStroke(n, pts)}
+        onDraft={(pts) => p.onInkDraft(n, pts)}
         onErase={p.onErase}
         onNote={(x, y) => {
           const r = pageRef.current!.getBoundingClientRect();

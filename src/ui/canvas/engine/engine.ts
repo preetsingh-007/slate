@@ -21,12 +21,12 @@ import type { DevicePrefs } from '../../../core/stores/settings';
 import { baseScale, centerOn, clampZoom, fitRect, panBy, pinch, toCanvas, viewRect, zoomAt, type Camera } from '../../../core/canvas/camera';
 import { objectBounds, rectsIntersect } from '../../../core/canvas/bounds';
 import { splitStroke, touchesStroke } from '../../../core/canvas/erase';
-import { expandGroups, hitObject, lassoSelect, rectPolygon, topHit } from '../../../core/canvas/hit';
+import { expandGroups, hitObject, imageUnder, lassoSelect, rectPolygon, topHit } from '../../../core/canvas/hit';
 import { makeStroke } from '../../../core/canvas/objects';
 import { dominantAxis, planSpace, prepareSpace, spaceUnits, type Axis, type SpacePlan, type SpaceSetup } from '../../../core/canvas/space';
 import { previewLineY } from '../../../core/canvas/daylines';
 import { attachedStrokes, shapeFrame, transformSelection, translateObject, type Affine } from '../../../core/canvas/transform';
-import { bbox, pointInPolygon } from '../../../core/ink/geometry';
+import { bbox } from '../../../core/ink/geometry';
 import { HIGHLIGHTER_ALPHA, resolveInkColor, strokeOutline, traceOutline } from '../../../core/ink/render';
 import { PointSmoother, PressureSimulator, quantizePoints } from '../../../core/ink/smoothing';
 import { Emitter } from '../../../core/util/emitter';
@@ -34,6 +34,9 @@ import { compareZ } from '../../../core/util/zindex';
 import type { CanvasController } from '../controller';
 import { ERASER_PX, useTools, type Tool } from '../toolStore';
 import { onPageHide } from '../../common/pageHide';
+import { EAGER_DRAFT_POINTS, draftKey, draftThrottle, removeDraft, settleDraft, writeDraft } from '../../common/drafts';
+import { segmentDocId } from '../../../core/stores/docIds';
+import { isoMonth } from '../../../core/util/time';
 import { ctx2d, drawInk, makeCanvas } from './draw';
 import { TileLayer } from './tileLayer';
 
@@ -56,6 +59,11 @@ type DrawGesture = {
   smoother: PointSmoother | null;
   pressure: PressureSimulator | null;
   real: boolean;
+  /** the stroke's id and creation time, fixed at pen-down so its draft and the stroke agree */
+  objId: string;
+  created: number;
+  /** Durability NFR: writes the stroke's draft while the pen is down */
+  draft: ReturnType<typeof draftThrottle>;
 };
 
 type Gesture =
@@ -186,6 +194,8 @@ export class CanvasEngine {
 
   destroy() {
     this.destroyed = true;
+    // a stroke whose view goes away is dropped, as it always was; so is its draft
+    if (this.gesture?.kind === 'draw') this.dropStrokeDraft(this.gesture);
     cancelAnimationFrame(this.raf);
     clearTimeout(this.settleTimer);
     for (const c of this.cleanup) c();
@@ -757,9 +767,13 @@ export class CanvasEngine {
           smoother: e.pointerType === 'pen' ? null : new PointSmoother(),
           pressure: real ? null : new PressureSimulator(),
           real,
+          objId: this.ctl.newId(),
+          created: Date.now(),
+          draft: draftThrottle(() => this.writeStrokeDraft(g), { eager: () => g.pts.length <= 3 * EAGER_DRAFT_POINTS }),
         };
         this.begin(e, g);
         this.addDrawPoint(g, e);
+        g.draft.schedule();
         break;
       }
       case 'eraser': {
@@ -828,6 +842,7 @@ export class CanvasEngine {
     switch (g.kind) {
       case 'draw': {
         for (const ev of list) this.addDrawPoint(g, ev);
+        g.draft.schedule();
         g.predicted = [];
         const pred = typeof e.getPredictedEvents === 'function' ? e.getPredictedEvents() : [];
         const lastP = g.pts[g.pts.length - 1] ?? 0.5;
@@ -969,6 +984,7 @@ export class CanvasEngine {
     const g = this.gesture;
     if (!g) return;
     this.gesture = null;
+    if (g.kind === 'draw') this.dropStrokeDraft(g);
     if (g.kind === 'two' && g.timer) clearTimeout(g.timer);
     if (g.kind === 'erase') this.hiddenErase.clear();
     if (g.kind === 'transform' || g.kind === 'endpoint') {
@@ -1056,33 +1072,39 @@ export class CanvasEngine {
     g.pts.push(p.x, p.y, g.pts[n - 1]);
   }
 
-  private commitStroke(g: DrawGesture) {
+  /**
+   * Durability NFR: the stroke being drawn, as far as it got, in localStorage (synchronous, so
+   * it survives a tab closed or killed with the pen down). Cleared once the stroke is on disk.
+   */
+  private writeStrokeDraft(g: DrawGesture) {
     if (!g.pts.length) return;
+    writeDraft(draftKey('stroke', g.objId), { kind: 'stroke', canvas: this.ctl.slug, id: g.objId, created: g.created, tool: g.tool, color: g.color, size: g.size, pts: quantizePoints(g.pts) });
+  }
+
+  private dropStrokeDraft(g: DrawGesture) {
+    g.draft.cancel();
+    removeDraft(draftKey('stroke', g.objId));
+  }
+
+  private commitStroke(g: DrawGesture) {
+    g.draft.cancel();
+    if (!g.pts.length) return removeDraft(draftKey('stroke', g.objId));
+    // the draft holds the whole stroke until the stroke itself is in IndexedDB
+    this.writeStrokeDraft(g);
     let pts = quantizePoints(g.pts);
     if (pts.length === 3) pts = [...pts, r1(pts[0] + 0.1), pts[1], pts[2]]; // a tap leaves a dot
     const stroke = makeStroke(
-      { id: this.ctl.newId(), now: Date.now(), device: this.ctl.device, z: this.ctl.model.topZ() },
-      { pts, tool: g.tool, color: g.color, size: g.size, attached: this.imageUnder(pts) },
+      { id: g.objId, now: g.created, device: this.ctl.device, z: this.ctl.model.topZ() },
+      { pts, tool: g.tool, color: g.color, size: g.size, attached: imageUnder((r) => this.ctl.model.query(r), pts) },
     );
     this.pendingWet = [...this.pendingWet, stroke];
     this.ctl.addObjects([stroke]);
+    const month = isoMonth(stroke.created);
+    const model = this.ctl.model;
+    settleDraft(this.ctl.services.docs, draftKey('stroke', g.objId), segmentDocId(this.ctl.slug, month), () => model.isLoaded(month) && !model.hasQueued());
     this.tilesPending = true;
     this.wetDirty = true;
     this.schedule();
-  }
-
-  /** C8: a stroke drawn over an image (most of its points inside the frame) attaches to it. */
-  private imageUnder(pts: number[]): string | undefined {
-    const b = bbox(ptsOf(pts));
-    const images = this.ctl.model.query(b).filter((o) => o.kind === 'image').sort(compareZ).reverse();
-    for (const img of images) {
-      const poly = rectPolygonRotated(img);
-      let inside = 0;
-      const n = pts.length / 3;
-      for (let i = 0; i + 1 < pts.length; i += 3) if (pointInPolygon({ x: pts[i], y: pts[i + 1] }, poly)) inside++;
-      if (inside / n >= 0.6) return img.id;
-    }
-    return undefined;
   }
 
   // ------------------------------------------------------------------ eraser (C12)
@@ -1444,18 +1466,3 @@ function union(a: Rect, b: Rect): Rect {
   const y = Math.min(a.y, b.y);
   return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
 }
-
-function ptsOf(flat: number[]): Pt[] {
-  const out: Pt[] = [];
-  for (let i = 0; i + 1 < flat.length; i += 3) out.push({ x: flat[i], y: flat[i + 1] });
-  return out;
-}
-
-function rectPolygonRotated(o: CanvasObject): Pt[] {
-  const poly = rectPolygon(o);
-  if (!o.rotation) return poly;
-  const c = { x: o.x + o.w / 2, y: o.y + o.h / 2 };
-  const a = (o.rotation * Math.PI) / 180;
-  return poly.map((p) => ({ x: c.x + (p.x - c.x) * Math.cos(a) - (p.y - c.y) * Math.sin(a), y: c.y + (p.x - c.x) * Math.sin(a) + (p.y - c.y) * Math.cos(a) }));
-}
-
