@@ -580,7 +580,7 @@
   position: absolute;
   right: 8px;
   bottom: 6px;
-  color: rgba(0, 0, 0, 0.3);
+  color: rgba(0, 0, 0, 0.62);
   font-size: 11px;
   pointer-events: none;
 }
@@ -1161,3 +1161,11 @@
 .md p:first-child {
   margin-top: 0;
 }
+
+/* visible focus on the scrolling readers (accessibility NFR: they take focus to scroll by keys) */
+.pdfv-scroll:focus-visible,
+.epub-scroll:focus-visible,
+.clip-scroll:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+

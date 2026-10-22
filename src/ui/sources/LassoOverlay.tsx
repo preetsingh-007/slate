@@ -2,8 +2,14 @@
  * The lasso used over every source in the side pane (S1): free-form or rectangle. Draws over
  * its positioned parent and reports the polygon in the parent's client coordinates. Pen,
  * mouse and one finger draw; two fingers fall through to scrolling and zooming.
+ *
+ * Keyboard (accessibility NFR): the overlay takes focus when the lasso is turned on; an arrow
+ * key or Enter shows a rectangle, the arrows move it, Shift+arrows resize it (Alt: finer
+ * steps), Enter captures it and Escape drops it.
  */
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
+type Box = { x: number; y: number; w: number; h: number };
 
 export type LassoMode = 'free' | 'rect';
 
@@ -19,6 +25,59 @@ export function LassoOverlay({ mode, onLasso, label = 'Lasso' }: { mode: LassoMo
   const ref = useRef<SVGSVGElement>(null);
   const drawing = useRef<number | null>(null);
   const touches = useRef(new Set<number>());
+  const [kb, setKb] = useState<Box | null>(null);
+
+  useEffect(() => {
+    ref.current?.focus({ preventScroll: true });
+  }, []);
+
+  const report = (poly: { x: number; y: number }[]) => {
+    const r = ref.current!.getBoundingClientRect();
+    const xs = poly.map((p) => p.x);
+    const ys = poly.map((p) => p.y);
+    const box = new DOMRect(Math.min(...xs) + r.left, Math.min(...ys) + r.top, Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+    if (box.width < 4 || box.height < 4) return;
+    onLasso({ points: poly.map((p) => ({ x: p.x + r.left, y: p.y + r.top })), rect: box });
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const svg = ref.current;
+    if (!svg) return;
+    const r = svg.getBoundingClientRect();
+    // the part of the overlay on screen
+    const vw = Math.min(r.width, window.innerWidth - Math.max(0, r.left));
+    const vh = Math.min(r.height, window.innerHeight - Math.max(0, r.top));
+    const arrow = e.key.startsWith('Arrow');
+    if (!kb) {
+      if (!arrow && e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      setKb({ x: Math.round(vw * 0.15), y: Math.round(vh * 0.25), w: Math.round(vw * 0.7), h: Math.round(vh * 0.3) });
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      setKb(null);
+      return;
+    }
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setKb(null);
+      report(rectPoints({ x: kb.x, y: kb.y }, { x: kb.x + kb.w, y: kb.y + kb.h }));
+      return;
+    }
+    if (!arrow) return;
+    e.preventDefault();
+    const step = e.altKey ? 4 : 16;
+    const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+    const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+    const b = e.shiftKey ? { ...kb, w: Math.max(8, kb.w + dx), h: Math.max(8, kb.h + dy) } : { ...kb, x: kb.x + dx, y: kb.y + dy };
+    b.x = Math.max(0, Math.min(b.x, vw - 8));
+    b.y = Math.max(0, Math.min(b.y, vh - 8));
+    b.w = Math.min(b.w, vw - b.x);
+    b.h = Math.min(b.h, vh - b.y);
+    setKb(b);
+  };
 
   const local = (e: React.PointerEvent) => {
     const r = ref.current!.getBoundingClientRect();
@@ -29,24 +88,22 @@ export function LassoOverlay({ mode, onLasso, label = 'Lasso' }: { mode: LassoMo
     const svg = ref.current;
     drawing.current = null;
     if (!svg || pts.length < 2) return setPts([]);
-    const r = svg.getBoundingClientRect();
     const poly = mode === 'rect' ? rectPoints(pts[0], pts[pts.length - 1]) : pts;
-    const xs = poly.map((p) => p.x);
-    const ys = poly.map((p) => p.y);
-    const box = new DOMRect(Math.min(...xs) + r.left, Math.min(...ys) + r.top, Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
     setPts([]);
-    if (box.width < 4 || box.height < 4) return;
-    onLasso({ points: poly.map((p) => ({ x: p.x + r.left, y: p.y + r.top })), rect: box });
+    report(poly);
   };
 
-  const shown = mode === 'rect' && pts.length ? rectPoints(pts[0], pts[pts.length - 1]) : pts;
+  const shown = kb ? rectPoints({ x: kb.x, y: kb.y }, { x: kb.x + kb.w, y: kb.y + kb.h }) : mode === 'rect' && pts.length ? rectPoints(pts[0], pts[pts.length - 1]) : pts;
 
   return (
     <svg
       ref={ref}
       className="lasso-overlay"
       role="application"
-      aria-label={label}
+      aria-label={`${label}. Keyboard: arrows show and move a rectangle, Shift+arrows resize it, Enter captures it.`}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      onBlur={() => setKb(null)}
       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 20, touchAction: 'pan-x pan-y pinch-zoom', cursor: 'crosshair' }}
       onPointerDown={(e) => {
         if (e.pointerType === 'touch') {

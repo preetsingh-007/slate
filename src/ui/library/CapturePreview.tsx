@@ -3,7 +3,7 @@
  * (or in the carry tray when the canvas is hidden); dragging the preview onto the canvas drops
  * them there. Several captures keep their order.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Send, X, GripVertical } from 'lucide-react';
 import type { Capture } from '../../core/model/capture';
@@ -40,7 +40,20 @@ export function CapturePreview() {
     return () => window.removeEventListener('keydown', on);
   }, [captures.length]);
 
-  if (!captures.length || !at) return null;
+  // keyboard: the preview takes focus on Send to canvas, and gives it back when it goes
+  const shown = captures.length > 0 && !!at;
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!shown || !el) return;
+    const opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
+    el.querySelector<HTMLElement>('[data-autofocus]')?.focus({ preventScroll: true });
+    return () => {
+      const now = document.activeElement;
+      if (opener?.isConnected && (!now || now === document.body || el.contains(now))) opener.focus({ preventScroll: true });
+    };
+  }, [shown]);
+
+  if (!shown) return null;
 
   const send = async () => {
     setBusy(true);
@@ -116,7 +129,7 @@ export function CapturePreview() {
       </div>
       <div className="cap-actions">
         <span className="muted small">Drag onto the canvas, or</span>
-        <button className="btn primary" disabled={busy} onClick={send}>
+        <button className="btn primary" disabled={busy} onClick={send} data-autofocus>
           <Send size={14} /> Send to canvas
         </button>
       </div>

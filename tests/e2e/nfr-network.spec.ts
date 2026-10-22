@@ -30,7 +30,11 @@ test('the app contacts only GitHub and the fetch helper; the token goes only to 
   expect((await request.post(`${GITHUB}/__setup`, { data: { repo, tokens: [TOKEN], files } })).ok()).toBe(true);
 
   const seen: Seen[] = [];
-  const record = async (r: Request) => seen.push({ url: r.url(), method: r.method(), headers: await r.allHeaders(), body: r.postData() ?? '' });
+  const record = async (r: Request) => {
+    // a worker's request may outlive the worker (pdf.js): fall back to the headers known so far
+    const headers = await r.allHeaders().catch(() => r.headers());
+    seen.push({ url: r.url(), method: r.method(), headers, body: r.postData() ?? '' });
+  };
   context.on('request', (r) => void record(r));
 
   // sign in (R4)

@@ -5,6 +5,7 @@ import { Copy, Highlighter, StickyNote, Trash2, X } from 'lucide-react';
 import { HIGHLIGHT_COLORS } from '../../core/library/annotations';
 import { LassoOverlay, type LassoMode, type LassoResult } from '../sources/LassoOverlay';
 import { usePageHide } from '../common/pageHide';
+import { usePopupFocus } from '../common/focus';
 
 /**
  * Hosts the lasso over the visible part of a scroll container (S1). It sits in a sticky,
@@ -66,6 +67,7 @@ export function Popover({ anchor, onClose, children, label, width = 260 }: { anc
     const left = Math.max(8, Math.min(anchor.left + anchor.width / 2 - width / 2, window.innerWidth - width - 8));
     setPos({ left, top });
   }, [anchor, width]);
+  usePopupFocus(ref, { onClose });
   useEffect(() => {
     const away = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && onClose();
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose();

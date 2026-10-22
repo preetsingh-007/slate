@@ -9,6 +9,7 @@ import { useServices } from '../../app/services';
 import { slugify } from '../../core/util/ids';
 import { useApp } from '../app/store';
 import { toast } from '../common/toast';
+import { Popup } from '../common/focus';
 
 /** slug → title, for side-pane tab titles. */
 export const canvasTitles = new Map<string, string>();
@@ -69,7 +70,7 @@ export function CanvasSwitcher() {
         <ChevronDown size={14} />
       </button>
       {open && (
-        <div className="menu cv-switch-menu" role="menu" aria-label="Canvases">
+        <Popup className="menu cv-switch-menu" role="menu" label="Canvases" onClose={() => setOpen(false)}>
           {mode === 'list' && (
             <>
               {list.map((m) => (
@@ -132,7 +133,7 @@ export function CanvasSwitcher() {
               </div>
             </form>
           )}
-        </div>
+        </Popup>
       )}
     </div>
   );

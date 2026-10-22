@@ -4,16 +4,18 @@
   --bg-sunk: #f2f0eb;
   --fg: #1f2328;
   --fg-muted: #626a73;
-  --fg-faint: #9aa1a8;
+  --fg-faint: #666d75;
   --border: #e2dfd8;
-  --accent: #2f6fde;
+  /* boundaries of inputs and buttons: 3:1 against the backgrounds (WCAG 1.4.11) */
+  --control-border: #878b92;
+  --accent: #2864cf;
   --accent-fg: #ffffff;
-  --danger: #c93a32;
-  --warn: #b7791f;
-  --ok: #2f8a4e;
+  --danger: #bd3730;
+  --warn: #8f6516;
+  --ok: #2a7a45;
   --ink-default: #1f2328;
-  --dayline: #b9b3a7;
-  --selection: rgba(47, 111, 222, 0.14);
+  --dayline: #8a8478;
+  --selection: rgba(40, 100, 207, 0.14);
   --flash: rgba(255, 196, 0, 0.45);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.08);
   --radius: 8px;
@@ -29,15 +31,16 @@
   --bg-sunk: #121417;
   --fg: #e8e6e1;
   --fg-muted: #a3a9b0;
-  --fg-faint: #6b727a;
+  --fg-faint: #8b929a;
   --border: #33373d;
+  --control-border: #6b7178;
   --accent: #6c9cf0;
   --accent-fg: #0d1117;
   --danger: #f0716a;
   --warn: #e0b050;
   --ok: #5cc27e;
   --ink-default: #e8e6e1;
-  --dayline: #5a5650;
+  --dayline: #7d776c;
   --selection: rgba(108, 156, 240, 0.2);
   --flash: rgba(255, 196, 0, 0.35);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.4);
@@ -100,7 +103,7 @@ button {
   gap: 6px;
   min-height: 32px;
   padding: 4px 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 6px;
   background: var(--bg-elev);
   cursor: pointer;
@@ -157,7 +160,7 @@ textarea {
   font: inherit;
   color: inherit;
   background: var(--bg-elev);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 6px;
   padding: 6px 8px;
 }

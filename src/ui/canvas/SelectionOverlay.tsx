@@ -2,7 +2,7 @@
  * The selection box with its handles (move, scale, rotate, text width, line ends) and the
  * action bar (C15): every action works with a tap, and from the keyboard on laptops.
  */
-import { useEffect, useRef, useState, type ComponentType } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ComponentType } from 'react';
 import {
   BringToFront,
   Copy,
@@ -29,6 +29,7 @@ import { CURRENT_INK } from '../../core/ink/render';
 import { payloadHtml, makePayload, selectionMarkdown } from '../../core/canvas/clipboard';
 import { getSelectionActions } from '../common/registries';
 import { toast } from '../common/toast';
+import { Popup } from '../common/focus';
 import { useCanvas, useFrame } from './context';
 import {
   beautifySelection,
@@ -137,6 +138,16 @@ function ActionBar({ barRef, objs }: { barRef: React.RefObject<HTMLDivElement | 
   const { actions, engine, services, slug } = c;
   const [menu, setMenu] = useState<'more' | 'color' | null>(null);
   const [png, setPng] = useState<string | null>(null);
+  // keyboard: when the selection goes (deleted, cleared) while focus is in this bar, focus
+  // returns to the canvas instead of being lost
+  useLayoutEffect(() => {
+    const bar = barRef.current;
+    const root = bar?.closest('.cv-view')?.querySelector<HTMLElement>('.cv-root');
+    return () => {
+      const now = document.activeElement;
+      if (root?.isConnected && (!now || now === document.body || bar?.contains(now))) root.focus({ preventScroll: true });
+    };
+  }, [barRef]);
   const hasInk = objs.some((o) => o.kind === 'stroke' || o.kind === 'shape');
   const strokes = objs.filter((o) => o.kind === 'stroke');
   const beautified = objs.filter((o) => o.kind === 'shape' && o.originals.length);
@@ -201,9 +212,16 @@ function ActionBar({ barRef, objs }: { barRef: React.RefObject<HTMLDivElement | 
         className="cv-btn cv-grip"
         role="button"
         tabIndex={0}
-        aria-label="Drag out to another app"
-        title="Drag to another app (image and Markdown)"
+        aria-label="Drag out to another app (Enter copies)"
+        title="Drag to another app (image and Markdown); Enter copies"
         draggable
+        onKeyDown={(e) => {
+          // S11 from the keyboard: the same PNG and Markdown, through the clipboard
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            void copySelection(actions);
+          }
+        }}
         onDragStart={(e) => {
           const md = selectionMarkdown(objs);
           e.dataTransfer.setData('text/plain', md);
@@ -218,7 +236,7 @@ function ActionBar({ barRef, objs }: { barRef: React.RefObject<HTMLDivElement | 
         <Ellipsis size={18} />
       </button>
       {menu === 'color' && (
-        <div className="cv-popover cv-swatches" role="menu" aria-label="Colour">
+        <Popup className="cv-popover cv-swatches" role="menu" label="Colour" onClose={() => setMenu(null)}>
           {[...PEN_COLORS, ...custom].map((col) => (
             <button
               key={col}
@@ -241,10 +259,10 @@ function ActionBar({ barRef, objs }: { barRef: React.RefObject<HTMLDivElement | 
               ))}
             </div>
           )}
-        </div>
+        </Popup>
       )}
       {menu === 'more' && (
-        <div className="cv-popover cv-menu" role="menu" aria-label="More actions">
+        <Popup className="cv-popover cv-menu" role="menu" label="More actions" onClose={() => setMenu(null)}>
           {objs.length > 1 && item('Group (⌘G)', () => groupSelection(actions), Group)}
           {grouped && item('Ungroup (⇧⌘G)', () => ungroupSelection(actions), Ungroup)}
           {item('Bring forward (])', () => restack(actions, 1), BringToFront)}
@@ -276,7 +294,7 @@ function ActionBar({ barRef, objs }: { barRef: React.RefObject<HTMLDivElement | 
               {a.label}
             </button>
           ))}
-        </div>
+        </Popup>
       )}
     </div>
   );

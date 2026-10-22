@@ -11,6 +11,7 @@ import { useServices } from '../../app/services';
 import { importBookFiles, newFromClipboard, openBook, openClipping, openedTimes } from './actions';
 import { useLibraryItems, useLocalPref, useSettingsVersion } from './hooks';
 import { useLibraryUi } from './state';
+import { Popup } from '../common/focus';
 
 type Shelf = 'books' | 'clippings';
 type Sort = 'added' | 'opened' | 'title';
@@ -213,7 +214,7 @@ function Item({ item, layout, hit, missing, onOpen }: { item: BookMeta | Clippin
           <MoreHorizontal size={16} />
         </button>
         {menu && (
-          <div className="menu inline" role="menu" onMouseLeave={() => setMenu(false)}>
+          <Popup className="menu inline" role="menu" label={`Actions for ${item.title}`} onClose={() => setMenu(false)}>
             <button
               role="menuitem"
               onClick={() => {
@@ -233,7 +234,7 @@ function Item({ item, layout, hit, missing, onOpen }: { item: BookMeta | Clippin
             >
               <Trash2 size={14} /> Delete
             </button>
-          </div>
+          </Popup>
         )}
       </div>
     </li>

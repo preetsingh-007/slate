@@ -8,6 +8,7 @@ import type { ClipRef } from '../../core/stores/canvases';
 import { useApp } from '../app/store';
 import { canvasApi } from '../common/registries';
 import { toast } from '../common/toast';
+import { usePopupFocus } from '../common/focus';
 
 /** Opens the clip's canvas (if needed) and reveals the clip. */
 export async function revealClip(ref: ClipRef): Promise<void> {
@@ -59,15 +60,10 @@ export function ClipList({ clips, anchor, onClose }: { clips: ClipRef[]; anchor:
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const away = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && onClose();
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('pointerdown', away, true);
-    window.addEventListener('keydown', esc);
-    ref.current?.querySelector('button')?.focus();
-    return () => {
-      window.removeEventListener('pointerdown', away, true);
-      window.removeEventListener('keydown', esc);
-    };
+    return () => window.removeEventListener('pointerdown', away, true);
   }, [onClose]);
+  usePopupFocus(ref, { onClose });
   const left = Math.max(8, Math.min(window.innerWidth - 288, anchor.left - 280));
   const top = Math.max(56, Math.min(window.innerHeight - 200, anchor.top));
   return createPortal(

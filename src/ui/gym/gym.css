@@ -667,7 +667,8 @@ button.gym-crumb:hover {
 .gym-todo-input:focus {
   border-color: var(--border) !important;
   background: var(--bg-elev) !important;
-  outline: none;
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .gym-todo-handle,
