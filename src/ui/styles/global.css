@@ -408,3 +408,19 @@ textarea {
     display: none;
   }
 }
+
+/* phones (iPhone scope): every top-bar control on screen, without scrolling the bar */
+@media (max-width: 520px) {
+  .topbar {
+    gap: 0;
+    padding: 0 4px;
+  }
+
+  .topbar .hide-phone {
+    display: none;
+  }
+
+  .topbar .icon-btn {
+    width: 34px;
+  }
+}

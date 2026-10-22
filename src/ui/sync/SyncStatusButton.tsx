@@ -100,7 +100,8 @@ export function SyncStatusButton() {
 
 export function SettingsButton() {
   return (
-    <button className="icon-btn" aria-label="Settings" title="Settings" onClick={() => useSyncUi.getState().openSettings('github')} data-testid="settings-button">
+    // on phones the sync status opens the same dialog, and the bar has no room for both
+    <button className="icon-btn hide-phone" aria-label="Settings" title="Settings" onClick={() => useSyncUi.getState().openSettings('github')} data-testid="settings-button">
       <Settings size={18} />
     </button>
   );

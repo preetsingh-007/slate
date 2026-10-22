@@ -365,6 +365,14 @@
   font-size: 14px;
 }
 
+/* phones: the reader's tools in two rows rather than scrolled out of sight */
+@media (max-width: 520px) {
+  .viewer-bar {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+}
+
 @media (max-width: 700px) {
   .viewer-drawer {
     position: absolute;

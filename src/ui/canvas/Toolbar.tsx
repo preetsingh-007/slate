@@ -227,16 +227,16 @@ export function Toolbar({ minimap, setMinimap, helpSignal = 0 }: { minimap: bool
         {tool === 'space' && <span className="cv-muted">Drag to insert space, drag back to remove it.</span>}
       </div>
       <span className="cv-spacer" />
-      <button type="button" className="cv-btn" aria-label="Go to a date" title="Go to a date" aria-expanded={pop === 'date'} onClick={() => toggle('date')}>
+      <button type="button" className="cv-btn cv-view-btn" aria-label="Go to a date" title="Go to a date" aria-expanded={pop === 'date'} onClick={() => toggle('date')}>
         <Calendar size={20} />
       </button>
-      <button type="button" className="cv-btn cv-zoom" aria-label={`Zoom ${zoom}%, view options`} title="View" aria-expanded={pop === 'zoom'} onClick={() => toggle('zoom')}>
+      <button type="button" className="cv-btn cv-view-btn cv-zoom" aria-label={`Zoom ${zoom}%, view options`} title="View" aria-expanded={pop === 'zoom'} onClick={() => toggle('zoom')}>
         {zoom}%
       </button>
-      <button type="button" className="cv-btn" aria-label="Canvas settings" title="Canvas settings" aria-expanded={pop === 'settings'} onClick={() => toggle('settings')}>
+      <button type="button" className="cv-btn cv-view-btn" aria-label="Canvas settings" title="Canvas settings" aria-expanded={pop === 'settings'} onClick={() => toggle('settings')}>
         <Settings size={20} />
       </button>
-      <button type="button" className="cv-btn" aria-label="Keyboard shortcuts and help (?)" title="Help (?)" aria-expanded={pop === 'help'} onClick={() => toggle('help')}>
+      <button type="button" className="cv-btn cv-view-btn" aria-label="Keyboard shortcuts and help (?)" title="Help (?)" aria-expanded={pop === 'help'} onClick={() => toggle('help')}>
         <CircleHelp size={20} />
       </button>
 
