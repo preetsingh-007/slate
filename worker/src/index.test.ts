@@ -34,7 +34,20 @@ describe('fetch helper', () => {
     expect(await checkUrl('https://evil6.example/', async () => ['fd00::1'])).toMatch(/private/);
   });
 
+  it('refuses IPv6 forms that embed a private IPv4 address (L8)', async () => {
+    for (const u of ['http://[::127.0.0.1]/', 'http://[::7f00:1]/', 'http://[::ffff:127.0.0.1]/', 'http://[::ffff:7f00:1]/', 'http://[2002:7f00:1::]/', 'http://[2002:c0a8:101::1]/', 'http://[2001:0:4136:e378:8000:63bf:3fff:fdd2]/', 'http://[::]/', 'http://[0:0:0:0:0:0:0:1]/', 'http://[64:ff9b::a00:1]/', 'http://[fec0::1]/', 'http://0177.0.0.1/', 'http://127.1/']) {
+      expect(await checkUrl(u, publicDns), u).not.toBeNull();
+    }
+    expect(await checkUrl('https://evil6.example/', async () => ['::a00:1'])).toMatch(/private/);
+    expect(await checkUrl('https://evil6.example/', async () => ['2002:a00:1::'])).toMatch(/private/);
+    expect(await checkUrl('http://[2606:4700:4700::1111]/', publicDns)).toBeNull();
+  });
+
   it('classifies addresses', () => {
+    expect(isPrivateIp('::a.b.c.d')).toBe(true); // unparseable: refused
+    expect(isPrivateIp('::7f00:1')).toBe(true);
+    expect(isPrivateIp('2001::1')).toBe(true);
+    expect(isPrivateIp('2001:4860:4860::8888')).toBe(false);
     expect(isPrivateIp('172.16.0.1')).toBe(true);
     expect(isPrivateIp('172.32.0.1')).toBe(false);
     expect(isPrivateIp('100.64.0.1')).toBe(true);

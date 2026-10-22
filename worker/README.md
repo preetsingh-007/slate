@@ -8,6 +8,10 @@ A stateless [Cloudflare Worker](https://developers.cloudflare.com/workers/) that
 - stops at 10 MB and 15 seconds;
 - logs nothing.
 
+### Residual risk: DNS rebinding
+
+The helper resolves each host (DNS over HTTPS) and refuses it when any address is private, including IPv6 forms that embed an IPv4 address (`::a.b.c.d`, `::ffff:a.b.c.d`, 6to4 `2002::/16`, Teredo `2001::/32`, NAT64). The fetch itself then resolves the name again, and a Worker cannot pin the connection to the address that was checked. A host whose DNS answers change between the two lookups (DNS rebinding) could therefore point the fetch at another address. On Cloudflare's network such a fetch cannot reach your own machine or local network, only addresses reachable from Cloudflare; the key (`X-Slate-Key`) and the origin check keep the helper to your own app. Do not deploy the helper where it can reach private services (for example as a self-hosted Worker inside a private network).
+
 ## Deploy (once, free tier)
 
 1. Create a free Cloudflare account and install Node 20 or later.

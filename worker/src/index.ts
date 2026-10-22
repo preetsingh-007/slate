@@ -121,20 +121,54 @@ function isIpLiteral(host: string): boolean {
   return /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(':') || /^(0x[0-9a-f]+|\d+)$/i.test(host);
 }
 
-/** True for loopback, private, link-local, CGNAT, multicast, reserved and mapped forms. */
+/**
+ * True for loopback, private, link-local, CGNAT, multicast, reserved and IPv4-embedding forms.
+ * IPv6 addresses are parsed in full, so every spelling of one address is classified alike; an
+ * address that does not parse is refused.
+ */
 export function isPrivateIp(ip: string): boolean {
   const v4 = parseV4(ip);
   if (v4) return privateV4(v4);
-  const h = ip.toLowerCase();
-  if (h === '::' || h === '::1') return true;
-  const mapped = h.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (mapped) return privateV4(parseV4(mapped[1])!);
-  const first = parseInt(h.split(':')[0] || '0', 16);
-  if ((first & 0xfe00) === 0xfc00) return true; // fc00::/7 unique local
-  if ((first & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
-  if ((first & 0xff00) === 0xff00) return true; // multicast
-  if (h.startsWith('64:ff9b:') || h.startsWith('2001:db8:') || h.startsWith('::ffff:')) return true;
+  const g = parseV6(ip.toLowerCase());
+  if (!g) return true;
+  const [a, b] = g;
+  if (g.slice(0, 6).every((x) => x === 0)) return true; // ::/96: ::, ::1, IPv4-compatible ::a.b.c.d
+  if (g.slice(0, 5).every((x) => x === 0) && g[5] === 0xffff) return true; // ::ffff:0:0/96 IPv4-mapped
+  if (a === 0x64 && b === 0xff9b) return true; // 64:ff9b::/96 and 64:ff9b:1::/48 NAT64
+  if (a === 0x100 && g[1] === 0 && g[2] === 0 && g[3] === 0) return true; // 100::/64 discard
+  if (a === 0x2001 && b === 0) return true; // 2001::/32 Teredo (embeds an IPv4 address)
+  if (a === 0x2001 && b === 0xdb8) return true; // documentation
+  if (a === 0x2002) return true; // 2002::/16 6to4 (embeds an IPv4 address)
+  if ((a & 0xfe00) === 0xfc00) return true; // fc00::/7 unique local
+  if ((a & 0xffc0) === 0xfe80 || (a & 0xffc0) === 0xfec0) return true; // link-local, site-local
+  if ((a & 0xff00) === 0xff00) return true; // multicast
   return false;
+}
+
+/** The eight 16-bit groups of an IPv6 address (with an optional dotted IPv4 tail), or null. */
+function parseV6(h: string): number[] | null {
+  if (!/^[0-9a-f:.]+$/.test(h) || !h.includes(':')) return null;
+  let tail: number[] = [];
+  const dot = h.lastIndexOf(':');
+  if (h.includes('.')) {
+    const v4 = h.slice(dot + 1).match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (!v4) return null;
+    const p = v4.slice(1).map(Number);
+    if (p.some((x) => x > 255)) return null;
+    tail = [(p[0] << 8) | p[1], (p[2] << 8) | p[3]];
+    h = h.slice(0, dot + 1); // '::ffff:', '::' or '1:2:3:4:5:6:'
+    if (!h.endsWith('::')) h = h.slice(0, -1);
+  }
+  const halves = h.split('::');
+  if (halves.length > 2) return null;
+  const groups = (s: string) => (s === '' ? [] : s.split(':'));
+  const head = groups(halves[0]);
+  const rest = halves.length === 2 ? groups(halves[1]) : [];
+  if ([...head, ...rest].some((x) => !/^[0-9a-f]{1,4}$/.test(x))) return null;
+  const want = 8 - tail.length;
+  const fill = want - head.length - rest.length;
+  if (halves.length === 2 ? fill < 1 : fill !== 0) return null;
+  return [...head.map((x) => parseInt(x, 16)), ...new Array<number>(fill).fill(0), ...rest.map((x) => parseInt(x, 16)), ...tail];
 }
 
 function parseV4(ip: string): number[] | null {
