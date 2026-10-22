@@ -1,0 +1,898 @@
+/* Gym area: reader (G7), revision list (G8), To-dos page (G4), topic picker (G1). */
+
+.gym-reader {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  position: relative;
+}
+
+.gym-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+  flex-shrink: 0;
+}
+
+.gym-head-title {
+  margin: 0 4px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.gym-spacer {
+  flex: 1;
+}
+
+.gym-crumbs {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.gym-crumb-part {
+  display: inline-flex;
+  align-items: center;
+  color: var(--fg-faint);
+}
+
+.gym-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+button.gym-crumb:hover {
+  background: var(--bg-sunk);
+  color: var(--fg);
+}
+
+.gym-crumb.current {
+  color: var(--fg);
+  font-weight: 500;
+  cursor: default;
+}
+
+.gym-scroll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* the lasso stays over the visible part of the page while it scrolls */
+.gym-lasso-host {
+  position: sticky;
+  top: 0;
+  height: 0;
+  z-index: 20;
+}
+
+.gym-lasso-box {
+  position: relative;
+}
+
+/* in lasso mode a finger or the Pencil draws; scroll with the wheel, or leave lasso mode */
+.gym-scroll.lassoing .lasso-overlay {
+  touch-action: none !important;
+}
+
+.gym-page {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 16px 20px 120px;
+}
+
+.gym-muted {
+  color: var(--fg-muted);
+  font-size: 13px;
+}
+
+.gym-note {
+  color: var(--fg-muted);
+  padding: 24px 0;
+}
+
+.gym-path {
+  font-family: var(--mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- rendered Markdown ---------- */
+
+.gym-md {
+  position: relative;
+  line-height: 1.6;
+  overflow-wrap: break-word;
+}
+
+.gym-md h1,
+.gym-md h2,
+.gym-md h3,
+.gym-md h4 {
+  line-height: 1.25;
+  margin: 1.4em 0 0.5em;
+  scroll-margin-top: 8px;
+}
+
+.gym-md h1 {
+  font-size: 1.6em;
+}
+
+.gym-md h2 {
+  font-size: 1.3em;
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid var(--border);
+}
+
+.gym-md h3 {
+  font-size: 1.1em;
+}
+
+.gym-md .gym-block:first-child > :first-child {
+  margin-top: 0;
+}
+
+.gym-md p,
+.gym-md ul,
+.gym-md ol,
+.gym-md pre,
+.gym-md table,
+.gym-md blockquote {
+  margin: 0 0 0.9em;
+}
+
+.gym-md ul,
+.gym-md ol {
+  padding-left: 1.6em;
+}
+
+.gym-md a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.gym-md code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  padding: 0.1em 0.3em;
+  border-radius: 4px;
+  background: var(--bg-sunk);
+}
+
+.gym-md pre {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-sunk);
+  overflow-x: auto;
+  line-height: 1.45;
+}
+
+.gym-md pre code {
+  padding: 0;
+  background: none;
+  font-size: 13px;
+}
+
+.gym-md table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.gym-md th,
+.gym-md td {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+}
+
+.gym-md th {
+  background: var(--bg-sunk);
+}
+
+.gym-md img {
+  max-width: 100%;
+  height: auto;
+}
+
+.gym-md img.gym-missing {
+  min-width: 120px;
+  min-height: 40px;
+  border: 1px dashed var(--border);
+}
+
+.gym-md blockquote {
+  padding: 0 1em;
+  border-left: 3px solid var(--border);
+  color: var(--fg-muted);
+}
+
+.gym-md .md-math-display,
+.gym-md .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.gym-md hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.gym-flash-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.gym-flash {
+  position: absolute;
+  border-radius: 3px;
+  background: var(--flash);
+  animation-name: gym-flash;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes gym-flash {
+  0%,
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* no fade with reduced motion: the highlight stays, then disappears after 2 s */
+@media (prefers-reduced-motion: reduce) {
+  .gym-flash {
+    animation: none !important;
+  }
+}
+
+/* ---------- front matter ---------- */
+
+.gym-fm {
+  margin: 0 0 14px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+
+.gym-fm summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  min-height: 28px;
+}
+
+.gym-fm dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 6px 0;
+}
+
+.gym-fm dl > div {
+  display: contents;
+}
+
+.gym-fm dt {
+  font-family: var(--mono);
+}
+
+.gym-fm dd {
+  margin: 0;
+  color: var(--fg);
+}
+
+.gym-fm-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 14px;
+  font-size: 13px;
+}
+
+.gym-source {
+  flex-basis: 100%;
+  color: var(--fg-muted);
+}
+
+.gym-chip,
+.gym-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  color: var(--fg-muted);
+}
+
+.gym-status-active,
+.gym-status-open {
+  color: var(--accent);
+  border-color: currentColor;
+}
+
+.gym-status-done,
+.gym-status-solved {
+  color: var(--ok);
+  border-color: currentColor;
+}
+
+.gym-status-revisit {
+  color: var(--warn);
+  border-color: currentColor;
+}
+
+/* ---------- lists of entries (folders, tree, search, revision) ---------- */
+
+.gym-listing h2,
+.gym-rev-section h2,
+.gym-todos h2 {
+  font-size: 15px;
+  margin: 24px 0 8px;
+}
+
+.gym-listing ul,
+.gym-results,
+.gym-tree ul,
+.gym-rev-section ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.gym-tree ul ul {
+  padding-left: 16px;
+}
+
+.gym-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gym-entry:hover,
+.gym-entry:focus-visible {
+  background: var(--bg-sunk);
+}
+
+.gym-entry-title {
+  font-weight: 500;
+}
+
+.gym-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.gym-link:hover {
+  color: var(--accent);
+}
+
+.gym-tree section h2 {
+  font-size: 18px;
+  margin: 20px 0 6px;
+}
+
+.gym-tree details {
+  margin: 0 0 6px;
+}
+
+.gym-tree summary {
+  min-height: 32px;
+  display: list-item;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+
+.gym-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elev);
+  color: var(--fg-muted);
+}
+
+.gym-search input {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  border: 0 !important;
+  outline: none;
+  background: transparent !important;
+  font-size: 16px; /* no zoom on focus in iOS Safari */
+}
+
+.gym-search:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.gym-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.gym-results {
+  margin-top: 12px;
+}
+
+.gym-hit {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.gym-snippet {
+  color: var(--fg-muted);
+  font-size: 13px;
+}
+
+.gym-snippet mark {
+  background: var(--flash);
+  color: inherit;
+  border-radius: 2px;
+}
+
+.gym-title {
+  font-size: 1.6em;
+  margin: 0 0 12px;
+}
+
+/* ---------- captures (S3) ---------- */
+
+.gym-captures {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: calc(8px + env(safe-area-inset-bottom));
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elev);
+  box-shadow: var(--shadow);
+}
+
+.gym-captures-list {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.gym-capture {
+  position: relative;
+  flex: 0 0 auto;
+  width: 180px;
+  height: 110px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.gym-capture img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.gym-capture-text {
+  padding: 6px 8px;
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.gym-capture-x {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg-elev);
+  cursor: pointer;
+}
+
+.gym-captures-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.gym-capture-ghost {
+  position: fixed;
+  z-index: 400;
+  max-width: 220px;
+  max-height: 140px;
+  overflow: hidden;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--bg-elev);
+  box-shadow: var(--shadow);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  font-size: 12px;
+}
+
+.gym-capture-ghost img {
+  max-width: 100%;
+  max-height: 130px;
+}
+
+/* ---------- revision list ---------- */
+
+.gym-count {
+  display: inline-block;
+  min-width: 22px;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-sunk);
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.gym-hint {
+  margin: -4px 0 8px;
+}
+
+.gym-rev-entry {
+  flex-direction: column;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  padding: 10px 8px;
+}
+
+.gym-rev-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.gym-spin {
+  color: var(--fg-muted);
+  animation: gym-spin 1s linear infinite;
+}
+
+@keyframes gym-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- To-dos page ---------- */
+
+.gym-todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.gym-todo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--bg-elev);
+  touch-action: pan-y;
+}
+
+.gym-todo input[type='checkbox'] {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin: 0 4px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.gym-todo-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  border-color: transparent !important;
+  background: transparent !important;
+  font-size: 16px; /* no zoom on focus in iOS Safari */
+}
+
+.gym-todo-input:focus {
+  border-color: var(--border) !important;
+  background: var(--bg-elev) !important;
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.gym-todo-handle,
+.gym-todo-handle-space {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-faint);
+  cursor: grab;
+  touch-action: none;
+}
+
+.gym-todo-handle:focus-visible {
+  color: var(--accent);
+}
+
+.gym-todo-remove {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.gym-todo-remove:hover {
+  color: var(--danger);
+  background: var(--bg-sunk);
+}
+
+@media (hover: hover) {
+  .gym-todo .gym-todo-remove {
+    opacity: 0;
+  }
+  .gym-todo:hover .gym-todo-remove,
+  .gym-todo:focus-within .gym-todo-remove {
+    opacity: 1;
+  }
+}
+
+.gym-todo.dragging {
+  z-index: 5;
+  box-shadow: var(--shadow);
+}
+
+.gym-todo.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.gym-todo.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.gym-todo-new {
+  margin-top: 2px;
+}
+
+.gym-todo-plus {
+  width: 28px;
+  color: var(--fg-faint);
+}
+
+.gym-done {
+  margin-top: 12px;
+}
+
+.gym-done summary {
+  min-height: 36px;
+  display: list-item;
+  cursor: pointer;
+  color: var(--fg-muted);
+}
+
+.gym-todo.checked .gym-todo-text,
+.gym-todo-text-done {
+  flex: 1;
+  color: var(--fg-muted);
+  text-decoration: line-through;
+}
+
+.gym-todo-day h3 {
+  margin: 16px 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+
+.gym-todo-text {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-height: 36px;
+  padding: 6px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gym-todo-text:hover {
+  background: var(--bg-sunk);
+}
+
+.gym-todo-canvas {
+  font-size: 12px;
+}
+
+/* ---------- topic picker ---------- */
+
+.gym-picker {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gym-picker-label {
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+
+.gym-picker-field {
+  position: relative;
+  display: flex;
+}
+
+.gym-picker-field input {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  padding-right: 32px;
+  font-family: var(--mono);
+  font-size: 14px;
+}
+
+.gym-picker-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.gym-picker-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  max-height: 280px;
+  overflow: auto;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  box-shadow: var(--shadow);
+}
+
+.gym-picker-label + .gym-picker-field + .gym-picker-list {
+  top: calc(100% - 0px);
+}
+
+.gym-picker-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-height: 36px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.gym-picker-option.variant {
+  padding-left: 22px;
+}
+
+.gym-picker-option[aria-selected='true'] {
+  background: var(--selection);
+}
+
+.gym-picker-empty {
+  padding: 8px;
+  color: var(--fg-muted);
+  font-size: 13px;
+}
+
+.gym-picker-warn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--warn);
+  font-size: 13px;
+}
+
+@media (max-width: 700px) {
+  .gym-page {
+    padding: 12px 14px 120px;
+  }
+  .gym-entry,
+  .gym-todo {
+    min-height: 44px;
+  }
+}
