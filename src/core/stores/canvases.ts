@@ -66,9 +66,15 @@ export class CanvasStore {
     await this.save();
   }
 
-  /** Replaces the list with the merged list from sync. */
-  async replaceAll(metas: CanvasMeta[]): Promise<void> {
-    this.metas = metas;
+  /**
+   * Applies sync's merge to the list as it is now (not to a copy taken before downloading, which
+   * would drop canvases created or edited meanwhile). `merge` returns the new list, or null when
+   * nothing changed.
+   */
+  async mergeFromRemote(merge: (current: readonly CanvasMeta[]) => CanvasMeta[] | null): Promise<void> {
+    const next = merge(this.metas);
+    if (!next) return;
+    this.metas = next;
     await this.save();
   }
 

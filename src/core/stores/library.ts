@@ -89,6 +89,21 @@ export class LibraryStore {
     await this.save();
   }
 
+  /**
+   * Stores a clipping's content downloaded by sync, without touching its metadata (which may
+   * have changed, or been deleted, while the content downloaded). False when it is gone.
+   */
+  async putClippingContent(id: string, content: ClippingContent): Promise<boolean> {
+    if (!this.clipping(id)) return false;
+    await this.db.set(`clipping:${id}`, content);
+    if (!this.clipping(id)) {
+      await this.db.del(`clipping:${id}`);
+      return false;
+    }
+    this.onChange.emit();
+    return true;
+  }
+
   async clippingContent(id: string): Promise<ClippingContent | null> {
     return (await this.db.get<ClippingContent>(`clipping:${id}`)) ?? null;
   }

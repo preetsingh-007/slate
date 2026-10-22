@@ -92,7 +92,6 @@ function freeSlug(slug: string, taken: (s: string) => boolean): string {
 async function pullLibrary(ctx: SyncContext, tree: Record<string, string>) {
   const { st, deps } = ctx;
   const { library } = deps;
-  const tombs = new Set(library.tombstones().map((t) => t.id));
   const isItem = (path: string) => {
     const f = parseRepoPath(path);
     return (f?.kind === 'book' && f.file === 'book.json' && NAME.test(f.slug)) || (f?.kind === 'clipping' && f.file === 'meta.json' && CLIPPING_DIR.test(f.slug));
@@ -112,7 +111,8 @@ async function pullLibrary(ctx: SyncContext, tree: Record<string, string>) {
     const base = st.base[path] as object | undefined;
     st.merged[path] = sha;
     st.base[path] = remote;
-    if (tombs.has(remote.id)) continue; // deleted here; the push removes it
+    // deleted here (read now: the owner may have deleted it while the files downloaded); the push removes it
+    if (library.tombstones().some((t) => t.id === remote.id)) continue;
     const items: (BookMeta | ClippingMeta)[] = isBook ? library.books() : library.clippings();
     const local = items.find((x) => x.id === remote.id);
     const taken = (s: string) => items.some((x) => x.slug === s) || Object.keys(tree).some((p) => p.startsWith(`library/${isBook ? 'books' : 'clippings'}/${s}/`));
@@ -144,8 +144,6 @@ async function pullLibrary(ctx: SyncContext, tree: Record<string, string>) {
 
 async function pullCanvases(ctx: SyncContext, tree: Record<string, string>) {
   const { st, deps } = ctx;
-  const metas = [...deps.canvases.list()];
-  let changed = false;
   const files = await prefetchJson(
     ctx,
     Object.entries(tree).filter(([path, sha]) => {
@@ -153,6 +151,7 @@ async function pullCanvases(ctx: SyncContext, tree: Record<string, string>) {
       return f?.kind === 'canvasJson' && NAME.test(f.slug) && st.merged[path] !== sha;
     }),
   );
+  const updates: { slug: string; base: CanvasFile | undefined; remote: CanvasFile }[] = [];
   for (const [path, sha] of Object.entries(tree)) {
     const f = parseRepoPath(path);
     if (f?.kind !== 'canvasJson' || !files.has(path)) continue;
@@ -160,29 +159,43 @@ async function pullCanvases(ctx: SyncContext, tree: Record<string, string>) {
     st.merged[path] = sha;
     if (!parsed) continue;
     const remote = canvasFile(canvasMetaFromFile(f.slug, parsed));
-    const i = metas.findIndex((m) => m.slug === f.slug);
-    if (i < 0) {
-      metas.push(canvasMetaFromFile(f.slug, remote));
-      changed = true;
-    } else {
-      const next = canvasMetaFromFile(f.slug, mergeCanvasFile(st.base[path] as CanvasFile | undefined, canvasFile(metas[i]), remote));
-      if (!deepEqual(next, metas[i])) {
-        metas[i] = next;
-        changed = true;
-      }
-    }
+    updates.push({ slug: f.slug, base: st.base[path] as CanvasFile | undefined, remote });
     st.base[path] = remote;
   }
-  // R3/R9: every month in the repository is a segment the canvas can load on demand
+  const months: [string, string][] = [];
   for (const path of Object.keys(tree)) {
     const f = parseRepoPath(path);
-    if (f?.kind !== 'segment') continue;
-    const i = metas.findIndex((m) => m.slug === f.slug);
-    if (i < 0 || (metas[i].segments && f.month in metas[i].segments!)) continue;
-    metas[i] = { ...metas[i], segments: { ...(metas[i].segments ?? {}), [f.month]: null } };
-    changed = true;
+    if (f?.kind === 'segment') months.push([f.slug, f.month]);
   }
-  if (changed) await ctx.quietly(() => deps.canvases.replaceAll(metas));
+  // merged into the list as it is after the downloads, so canvases created or changed here
+  // meanwhile are kept (R1)
+  await ctx.quietly(() =>
+    deps.canvases.mergeFromRemote((current) => {
+      const metas = [...current];
+      let changed = false;
+      for (const { slug, base, remote } of updates) {
+        const i = metas.findIndex((m) => m.slug === slug);
+        if (i < 0) {
+          metas.push(canvasMetaFromFile(slug, remote));
+          changed = true;
+          continue;
+        }
+        const next = canvasMetaFromFile(slug, mergeCanvasFile(base, canvasFile(metas[i]), remote));
+        if (!deepEqual(next, metas[i])) {
+          metas[i] = next;
+          changed = true;
+        }
+      }
+      // R3/R9: every month in the repository is a segment the canvas can load on demand
+      for (const [slug, month] of months) {
+        const i = metas.findIndex((m) => m.slug === slug);
+        if (i < 0 || (metas[i].segments && month in metas[i].segments!)) continue;
+        metas[i] = { ...metas[i], segments: { ...(metas[i].segments ?? {}), [month]: null } };
+        changed = true;
+      }
+      return changed ? metas : null;
+    }),
+  );
 }
 
 async function pullSettings(ctx: SyncContext, tree: Record<string, string>) {

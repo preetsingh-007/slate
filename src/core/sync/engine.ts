@@ -622,7 +622,8 @@ export class SyncEngine {
         if (!(await assets.has(hash))) await assets.putWithHash(hash, new Blob([(await this.remote.getBlob(sha)) as BlobPart], { type: mime }));
         list.push({ path: `assets/${file}`, hash, mime });
       }
-      await this.context(st).quietly(() => library.putClipping(meta, { markdown, snapshotHtml, assets: list }));
+      // the metadata as it is now: it may have been merged or deleted while this downloaded
+      if (!(await this.context(st).quietly(() => library.putClippingContent(id, { markdown, snapshotHtml, assets: list })))) return false;
       if (st.tree[clippingAnnotationsPath(meta.slug)]) void this.ensureDoc(annotationsDocId(id));
       return true;
     } catch (err) {
