@@ -134,7 +134,8 @@ test.describe('New from link', () => {
     const frame = page.frameLocator('[data-testid="snapshot-frame"]');
     await expect(frame.locator('h1')).toHaveText('Why spaced repetition works');
     await expect(frame.locator('h1')).toHaveCSS('color', 'rgb(160, 30, 30)');
-    const f = page.frames().find((x) => x.url().includes('snapshot.html'))!;
+    // the frame page is a srcdoc document (it must open offline, see SnapshotFrame.tsx)
+    const f = (await (await iframe.elementHandle())!.contentFrame())!;
     const probe = await f.evaluate(async () => {
       const out: Record<string, string> = { origin: self.origin };
       try {

@@ -29,7 +29,7 @@ import { useLibraryUi } from '../state';
 import { buildTextMap, hitInPolygon, rangeFragment, offsetOf, rangeFromOffsets, rangeRectsIn, type TextMap } from '../textMap';
 import { HighlightMenu, LassoHost, NoteEditor, SelectionMenu, copyText } from '../viewerParts';
 import { AnnotationList } from '../pdf/PdfViewer';
-import { SnapshotFrame, type FrameController, type FrameHighlight, type FrameMark } from './SnapshotFrame';
+import { loadFramePage, SnapshotFrame, type FrameController, type FrameHighlight, type FrameMark } from './SnapshotFrame';
 
 type View = 'reader' | 'original';
 type Tool = 'select' | 'highlight' | 'lasso';
@@ -94,6 +94,10 @@ function ClippingView({ meta, content }: { meta: ClippingMeta; content: Clipping
   const [markList, setMarkList] = useState<{ clips: ClipRef[]; anchor: DOMRect } | null>(null);
 
   useEffect(() => setTitle(meta.title), [meta.title]);
+  // the Original view's frame page, read ahead so switching to it never waits on the network
+  useEffect(() => {
+    if (content.snapshotHtml) void loadFramePage().catch(() => {});
+  }, [content.snapshotHtml]);
   // the toggle answers at once; the stored setting follows
   const [scriptsOn, setScriptsOn] = useState(!!meta.scripts);
   useEffect(() => setScriptsOn(!!meta.scripts), [meta.scripts]);
