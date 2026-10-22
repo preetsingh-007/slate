@@ -176,7 +176,10 @@ export function PdfViewer({ book, onMissing }: { book: BookMeta; onMissing(): vo
     const pos = readingPosition(settings, book.id)?.locator;
     if (pos?.type === 'pdf') {
       const n = Math.min(pageCount, pos.page);
-      scroll.current.scrollTop = offsetsRef.current[n] + pos.region.y * cssHeightFor(n);
+      const apply = (el: HTMLElement) => (el.scrollTop = offsetsRef.current[n] + pos.region.y * cssHeightFor(n));
+      // a hidden tab (P3: restored on start, or left before the book loaded) cannot scroll yet
+      if (scroll.current.clientWidth > 0) apply(scroll.current);
+      else pendingRestore.current = apply;
     }
   });
 
@@ -212,7 +215,11 @@ export function PdfViewer({ book, onMissing }: { book: BookMeta; onMissing(): vo
   }, [zoom, cssHeightFor]);
 
   // back from a hidden tab: return to the page and offset that were on screen
+  const pendingRestore = useRef<((el: HTMLElement) => void) | null>(null);
   useKeepScroll(scroll, (el) => {
+    const pending = pendingRestore.current;
+    pendingRestore.current = null;
+    if (pending) return void pending(el);
     const { n, intra } = posRef.current;
     if (offsetsRef.current[n] !== undefined) el.scrollTop = offsetsRef.current[n] + intra * cssHeightFor(n);
   });

@@ -2,9 +2,11 @@ import { useEffect, useRef, type RefObject } from 'react';
 
 /**
  * Inactive side-pane tabs stay mounted but hidden (display: none), which resets their scroll
- * position; this restores it when the tab is shown again.
+ * position; this restores it when the tab is shown again: to where it was (`last`), or as
+ * `restore` decides. A tab restored on reopen (P3) can mount hidden; `restore` is then also the
+ * place to apply its saved reading position the first time it is shown.
  */
-export function useKeepScroll(ref: RefObject<HTMLElement | null>, restore?: (el: HTMLElement) => void, key?: unknown) {
+export function useKeepScroll(ref: RefObject<HTMLElement | null>, restore?: (el: HTMLElement, last: number) => void, key?: unknown) {
   const last = useRef(0);
   const hidden = useRef(false);
   const cb = useRef(restore);
@@ -23,7 +25,7 @@ export function useKeepScroll(ref: RefObject<HTMLElement | null>, restore?: (el:
       if (!hidden.current) return;
       hidden.current = false;
       requestAnimationFrame(() => {
-        if (cb.current) cb.current(el);
+        if (cb.current) cb.current(el, last.current);
         else el.scrollTop = last.current;
       });
     });

@@ -21,7 +21,7 @@ import { LibraryPane } from './LibraryPane';
 import { useLibraryUi } from './state';
 import './library.css';
 
-/** Set by LibraryMount; pane titles are read outside React. */
+/** Set by LibraryButtons and LibraryMount; pane titles are read outside React. */
 let servicesRef: Services | null = null;
 
 registerPane('library', { component: LibraryPane, title: () => 'Library' });
@@ -91,6 +91,8 @@ export function LibraryMount() {
 /** Top-bar buttons: Library, New from clipboard, New from link. */
 export function LibraryButtons() {
   const services = useServices();
+  // the top bar renders before the side pane: tab titles restored on start (P3) need this
+  servicesRef = services;
   return (
     <>
       <button className="icon-btn" aria-label="Library" title="Library" onClick={openLibrary}>

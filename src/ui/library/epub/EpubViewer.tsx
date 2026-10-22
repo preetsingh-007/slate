@@ -70,7 +70,19 @@ export function EpubViewer({ book: meta, onMissing }: { book: BookMeta; onMissin
   const [book, setBook] = useState<EpubBook | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
-  useKeepScroll(scroll);
+  // a saved position waiting for the tab to be shown (P3: restored tabs can open hidden)
+  const pendingRestore = useRef<(() => void) | null>(null);
+  // keyed on the book: the scroller only exists once the book has loaded
+  useKeepScroll(
+    scroll,
+    (el, last) => {
+      const f = pendingRestore.current;
+      pendingRestore.current = null;
+      if (f) f();
+      else el.scrollTop = last;
+    },
+    !!book,
+  );
   const [visible, setVisible] = useState<Set<number>>(() => new Set([0]));
   const restored = useRef(false);
   const [fontSize, setFontSize] = useLocalPref('slate-epub-font', 18);
@@ -166,7 +178,9 @@ export function EpubViewer({ book: meta, onMissing }: { book: BookMeta; onMissin
     const pos = readingPosition(settings, meta.id)?.locator;
     if (pos?.type === 'epub') {
       const i = chapterIndex(pos.chapter);
-      if (i >= 0) void scrollToChapter(i, pos.position);
+      if (i < 0) return;
+      if (scroll.current && scroll.current.clientWidth === 0) pendingRestore.current = () => void scrollToChapter(i, pos.position);
+      else void scrollToChapter(i, pos.position);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book]);

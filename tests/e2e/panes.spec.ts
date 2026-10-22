@@ -6,7 +6,8 @@
 import { expect, test, type APIRequestContext, type Browser, type Page } from '@playwright/test';
 import { GYM_FIXTURE, openWithGym } from './gym-helpers';
 import { dragClient, objects, withCanvas } from './canvas-helpers';
-import { lassoRect, libraryItems, openApp } from './libraryHelpers';
+import { importFile, lassoRect, libraryItems, openApp } from './libraryHelpers';
+import { makeEpub } from '../../src/test/fixtures';
 
 type App = { getState(): { tabs: { kind: string }[]; active: number; divider: number; swapped: boolean; layout: string; paneOpen: boolean; openTab(t: object): void; setDivider(f: number): void; swap(): void; activate(i: number): void } };
 const app = (page: Page) => page.evaluate(() => {
@@ -17,6 +18,8 @@ const act = (page: Page, fn: string) => page.evaluate((f) => new Function('s', `
 const side = (page: Page) => page.locator('.pane-slot:not([hidden])');
 
 test.describe('P3: panes, tabs and places survive reopening', () => {
+  test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
+
   test('the layout comes back on reload: tabs, the active tab, divider and sides', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'To-dos' }).click();
@@ -60,6 +63,31 @@ test.describe('P3: panes, tabs and places survive reopening', () => {
     expect(cam.y).toBeCloseTo(-3000, 0);
     await page.getByRole('tab', { name: /long/ }).click();
     await expect.poll(() => side(page).locator('.gym-scroll').evaluate((el) => el.scrollTop / (el.scrollHeight - el.clientHeight))).toBeCloseTo(0.6, 1);
+  });
+
+  test('a clipping and an EPUB in tabs that reopen hidden come back to their place when shown', async ({ page }) => {
+    await openApp(page);
+    await importFile(page, 'book.epub', await makeEpub(), 'application/epub+zip');
+    await expect(page.locator('[data-chapter="0"] .epub-html table')).toBeVisible();
+    await page.locator('.epub-scroll').evaluate((el) => (el.scrollTop = el.scrollHeight));
+    await page.waitForTimeout(1200);
+    const epubTop = await page.locator('.epub-scroll').evaluate((el) => el.scrollTop);
+    expect(epubTop).toBeGreaterThan(300);
+    const text = ['# Long clipping', '', ...Array.from({ length: 80 }, (_, i) => `Line ${i + 1} of the clipping.\n`)].join('\n');
+    await page.evaluate(async (t) => navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([t], { type: 'text/plain' }) })]), text);
+    await page.getByRole('button', { name: 'New from clipboard' }).click();
+    const clip = side(page).locator('.clip-scroll');
+    await expect(side(page).getByText('Line 80 of the clipping.')).toBeAttached();
+    await clip.evaluate((el) => (el.scrollTop = (el.scrollHeight - el.clientHeight) * 0.7));
+    await page.waitForTimeout(1200);
+    // both go to the background, then the app reopens
+    await page.getByRole('button', { name: 'To-dos' }).click();
+    await page.reload();
+    await page.waitForFunction(() => !!(window as unknown as { __slate?: unknown }).__slate);
+    await page.getByRole('tab', { name: /Long clipping/ }).click();
+    await expect.poll(() => side(page).locator('.clip-scroll').evaluate((el) => el.scrollTop / (el.scrollHeight - el.clientHeight))).toBeCloseTo(0.7, 1);
+    await page.getByRole('tab', { name: /The Slate Test Book/ }).click();
+    await expect.poll(() => side(page).locator('.epub-scroll').evaluate((el) => el.scrollTop)).toBeGreaterThan(epubTop - 200);
   });
 
   test('another device’s layout follows the owner (synced through settings)', async ({ browser, request }) => {

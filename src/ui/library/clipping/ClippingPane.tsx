@@ -102,7 +102,18 @@ function ClippingView({ meta, content }: { meta: ClippingMeta; content: Clipping
 
   // ---------------------------------------------------------------- Reader view
   const scroll = useRef<HTMLDivElement>(null);
-  useKeepScroll(scroll, undefined, shownView);
+  // a saved position waiting for the tab to be shown (P3: restored tabs can open hidden)
+  const pendingRestore = useRef<((el: HTMLElement) => void) | null>(null);
+  useKeepScroll(
+    scroll,
+    (el, last) => {
+      const f = pendingRestore.current;
+      pendingRestore.current = null;
+      if (f) f(el);
+      else el.scrollTop = last;
+    },
+    shownView,
+  );
   const article = useRef<HTMLDivElement>(null);
   const [html, setHtml] = useState<string | null>(null);
   const [map, setMap] = useState<TextMap | null>(null);
@@ -273,7 +284,9 @@ function ClippingView({ meta, content }: { meta: ClippingMeta; content: Clipping
     if (restored.current || !el || shownView !== 'reader' || (meta.format !== 'plain' && html == null)) return;
     restored.current = true;
     if (useLibraryUi.getState().jumps[meta.id]) return;
-    el.scrollTop = savedFraction * (el.scrollHeight - el.clientHeight);
+    const apply = (e: HTMLElement) => (e.scrollTop = savedFraction * (e.scrollHeight - e.clientHeight));
+    if (el.clientWidth > 0) apply(el);
+    else pendingRestore.current = apply;
   }, [html, shownView, meta.format, meta.id, savedFraction]);
 
   // ---------------------------------------------------------------- selection (L11)

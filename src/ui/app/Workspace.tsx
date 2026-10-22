@@ -2,7 +2,8 @@
  * The canvas plus one side pane with a draggable divider (P1). On narrow screens one pane
  * shows at a time with a quick switch (P2).
  */
-import { useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useServices } from '../../app/services';
 import { X, Maximize2, Minimize2, ArrowLeftRight, PanelRightClose } from 'lucide-react';
 import { useApp } from './store';
 import { paneKind } from '../panes/registry';
@@ -75,6 +76,14 @@ export function Workspace({ canvas }: { canvas: ReactNode }) {
 
 function SidePane({ tabs, active, paneOnly, narrow }: { tabs: ReturnType<typeof useApp.getState>['tabs']; active: number; paneOnly: boolean; narrow: boolean }) {
   const app = useApp();
+  // tab titles come from the library and the canvas list, which can change (or arrive with a
+  // sync) after the tabs were restored (P3)
+  const services = useServices();
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const offs = [services.library.onChange.on(() => bump((x) => x + 1)), services.canvases.onChange.on(() => bump((x) => x + 1))];
+    return () => offs.forEach((off) => off());
+  }, [services]);
   return (
     <>
       <div className="tabs" role="tablist" aria-label="Open items">
