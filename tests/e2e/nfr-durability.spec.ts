@@ -89,7 +89,10 @@ test.describe('durability (NFR)', () => {
     // ink with the pen still down
     // the book's tab comes back with the app (P3)
     await expect(next.locator('.pdfv-page[data-page="1"] canvas.ready')).toBeVisible();
+    // the book's annotations are open (the note shows) before drawing
+    await expect(next.getByTestId('pdf-note')).toHaveCount(1);
     await next.getByRole('button', { name: 'Pen', exact: true }).click();
+    await expect(next.locator('.pdfv-page[data-page="1"] [data-testid="ink-input"]')).toBeVisible();
     const box2 = (await next.locator('.pdfv-page[data-page="1"]').boundingBox())!;
     await next.mouse.move(box2.x + 100, box2.y + 500);
     await next.mouse.down();

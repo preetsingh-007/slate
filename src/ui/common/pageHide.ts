@@ -30,7 +30,7 @@ export function usePageHide(save: () => void) {
     () =>
       onPageHide(() => {
         latest.current();
-        void services.docs.flush();
+        void services.docs.flushNow();
       }),
     [services],
   );
