@@ -87,7 +87,16 @@ export function CanvasView({ slug, embedded = false }: { slug: string; embedded?
   useEffect(() => {
     const el = root.current;
     if (!engine || !el) return;
-    const measure = () => engine.resize(el.clientWidth, el.clientHeight);
+    // a saved side-pane view waiting for the tab to be shown (its zoom needs the pane's width)
+    let pendingView: { x: number; y: number; w: number } | null = null;
+    const showView = (r: { x: number; y: number; w: number }) => engine.setCamera({ x: r.x, y: r.y, zoom: engine.width / (r.w * engine.base) });
+    const measure = () => {
+      engine.resize(el.clientWidth, el.clientHeight);
+      if (pendingView && engine.width) {
+        showView(pendingView);
+        pendingView = null;
+      }
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
@@ -105,8 +114,11 @@ export function CanvasView({ slug, embedded = false }: { slug: string; embedded?
       // P3: a canvas in the side pane reopens where it was; the main canvas follows C20
       const saved = embedded ? readingPosition(services.settings, canvasPositionId(slug))?.locator : undefined;
       if (saved?.type === 'canvas' && saved.region.w > 0) {
-        const zoom = engine.width ? engine.width / (saved.region.w * engine.base) : 1;
-        engine.setCamera({ x: saved.region.x, y: saved.region.y, zoom });
+        if (engine.width) showView(saved.region);
+        else {
+          engine.setCamera({ x: saved.region.x, y: saved.region.y, zoom: 1 });
+          pendingView = saved.region;
+        }
       } else engine.jumpToNow(false);
       await ctl.loadForView(engine.view);
       if (!alive) return;
