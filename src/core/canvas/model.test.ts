@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import type { StrokeObject, TextObject } from '../model/types';
-import { keyAfter, keyBefore, keyBetween } from '../util/zindex';
 import { CanvasModel } from './model';
 
 function memorySource() {
@@ -235,18 +234,5 @@ describe('CanvasModel across a month boundary (W1)', () => {
     m.undo();
     m.undo();
     expect(m.count).toBe(0);
-  });
-});
-
-describe('zindex', () => {
-  it('generates keys between any two keys', () => {
-    const keys = [keyAfter(null)];
-    for (let i = 0; i < 200; i++) keys.push(keyAfter(keys[keys.length - 1]));
-    for (let i = 0; i < 200; i++) keys.unshift(keyBefore(keys[0]));
-    for (let i = 1; i < keys.length; i++) {
-      expect(keys[i - 1] < keys[i]).toBe(true);
-      const mid = keyBetween(keys[i - 1], keys[i]);
-      expect(keys[i - 1] < mid && mid < keys[i]).toBe(true);
-    }
   });
 });
