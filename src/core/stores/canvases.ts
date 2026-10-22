@@ -10,8 +10,8 @@ import { objectsMap, readObject } from '../canvas/segment';
 import type { CanvasMeta, ClipObject, Rect } from '../model/types';
 import type { DocStore } from '../storage/docstore';
 import type { SlateDB } from '../storage/idb';
-import { Emitter } from '../util/emitter';
 import { uid } from '../util/ids';
+import { SharedKv } from './sharedKv';
 import { parseSegmentDocId, segmentDocId } from './docIds';
 
 export const DEFAULT_CANVAS = 'main';
@@ -23,25 +23,35 @@ export interface ClipRef {
 }
 
 export class CanvasStore {
-  readonly onChange = new Emitter<void>();
-  private metas: CanvasMeta[] = [];
+  private kv!: SharedKv<CanvasMeta[]>;
   private models = new Map<string, CanvasModel>();
   private fetchRemote: ((docId: string) => Promise<unknown>) | null = null;
 
   private constructor(
-    private db: SlateDB,
     private docs: DocStore,
     private device: string,
   ) {}
 
+  /**
+   * The list is shared with other tabs (sharedKv.ts): every change re-reads it before writing.
+   */
   static async open(db: SlateDB, docs: DocStore, device: string): Promise<CanvasStore> {
-    const s = new CanvasStore(db, docs, device);
-    s.metas = (await db.get<CanvasMeta[]>('canvases')) ?? [];
+    const s = new CanvasStore(docs, device);
+    s.kv = await SharedKv.open<CanvasMeta[]>(db, 'canvases', (raw) => raw ?? []);
     if (!s.metas.some((m) => m.slug === DEFAULT_CANVAS)) {
-      s.metas.push({ id: DEFAULT_CANVAS, slug: DEFAULT_CANVAS, title: 'Main', topics: [], segments: {} });
-      await db.set('canvases', s.metas);
+      const main: CanvasMeta = { id: DEFAULT_CANVAS, slug: DEFAULT_CANVAS, title: 'Main', topics: [], segments: {} };
+      await s.kv.mutate((list) => (list.some((m) => m.slug === DEFAULT_CANVAS) ? list : [...list, main]));
     }
     return s;
+  }
+
+  /** Fires on every change, here or saved by another tab. */
+  get onChange() {
+    return this.kv.onChange;
+  }
+
+  private get metas(): CanvasMeta[] {
+    return this.kv.get();
   }
 
   list(): CanvasMeta[] {
@@ -55,15 +65,13 @@ export class CanvasStore {
   async create(title: string, slug: string): Promise<CanvasMeta> {
     if (this.meta(slug)) throw new Error(`A canvas named ${slug} exists.`);
     const meta: CanvasMeta = { id: uid(), slug, title, topics: [], segments: {} };
-    this.metas = [...this.metas, meta];
-    await this.save();
-    return meta;
+    await this.kv.mutate((list) => (list.some((m) => m.slug === slug) ? list : [...list, meta]));
+    return this.meta(slug) ?? meta;
   }
 
   /** Updates a canvas's metadata (title, topics, segment bounds). */
   async update(slug: string, patch: Partial<Omit<CanvasMeta, 'slug'>>): Promise<void> {
-    this.metas = this.metas.map((m) => (m.slug === slug ? { ...m, ...patch } : m));
-    await this.save();
+    await this.kv.mutate((list) => list.map((m) => (m.slug === slug ? { ...m, ...patch } : m)));
   }
 
   /**
@@ -72,10 +80,8 @@ export class CanvasStore {
    * nothing changed.
    */
   async mergeFromRemote(merge: (current: readonly CanvasMeta[]) => CanvasMeta[] | null): Promise<void> {
-    const next = merge(this.metas);
-    if (!next) return;
-    this.metas = next;
-    await this.save();
+    if (!merge(this.metas)) return;
+    await this.kv.mutate((list) => merge(list) ?? list);
   }
 
   /** Months known to have content (from the index) plus loaded ones. */
@@ -140,7 +146,8 @@ export class CanvasStore {
     if (!meta) return;
     const segments = { ...(meta.segments ?? {}), ...bounds };
     if (JSON.stringify(segments) === JSON.stringify(meta.segments ?? {})) return;
-    await this.update(slug, { segments });
+    // merged into the stored months, not this tab's copy of them
+    await this.kv.mutate((list) => list.map((m) => (m.slug === slug ? { ...m, segments: { ...(m.segments ?? {}), ...bounds } } : m)));
   }
 
   /**
@@ -162,10 +169,6 @@ export class CanvasStore {
     return out;
   }
 
-  private async save() {
-    await this.db.set('canvases', this.metas);
-    this.onChange.emit();
-  }
 }
 
 async function stateDoc(docs: DocStore, docId: string): Promise<Y.Doc | null> {

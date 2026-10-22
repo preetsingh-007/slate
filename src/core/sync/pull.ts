@@ -212,7 +212,8 @@ async function pullSettings(ctx: SyncContext, tree: Record<string, string>) {
   if (!remote) return;
   const local = deps.settings.get();
   const merged = mergeSettings(local, { ...DEFAULT_SETTINGS, ...remote });
-  if (!deepEqual(merged, local)) await ctx.quietly(() => deps.settings.replace(merged));
+  // merged into the settings as they are when written (R1: another tab may have changed them)
+  if (!deepEqual(merged, local)) await ctx.quietly(() => deps.settings.mergeFromRemote(remote));
   st.base[SETTINGS_PATH] = remote;
 }
 

@@ -1,7 +1,9 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './ui/app/App';
+import { OtherTab } from './ui/app/OtherTab';
 import { ServicesContext, createServices, requestPersistentStorage } from './app/services';
+import { acquireTabLock, type TabLock } from './app/tabLock';
 import { useApp } from './ui/app/store';
 import { restoreLocalLayout, startLayoutSync } from './ui/app/layoutSync';
 import * as registries from './ui/common/registries';
@@ -9,10 +11,32 @@ import { useLibraryUi } from './ui/library/state';
 import 'katex/dist/katex.min.css';
 import './ui/styles/global.css';
 
+type Root = ReturnType<typeof createRoot>;
+
 async function start() {
   const root = createRoot(document.getElementById('root')!);
+  // R1: one tab at a time (app/tabLock.ts)
+  const lock = await acquireTabLock();
+  if (lock.state === 'busy') {
+    root.render(<OtherTab onUse={() => void acquireTabLock(undefined, { steal: true }).then((l) => boot(root, l))} />);
+    return;
+  }
+  await boot(root, lock);
+}
+
+async function boot(root: Root, lock: TabLock) {
   try {
     const services = await createServices();
+    if (lock.state === 'held') {
+      // another tab took over: stop, keep what is saved, and reload into the "open elsewhere"
+      // screen (a reload discards this tab's copies of the data without writing them back;
+      // unmounting the app here would let its views save their state once more)
+      void lock.lost.then(async () => {
+        services.sync.stop();
+        await services.docs.flush().catch(() => undefined);
+        location.reload();
+      });
+    }
     void requestPersistentStorage();
     // P3: reopen as it was (local first), then keep the layout saved and synced
     const canvasExists = (slug: string) => !!services.canvases.meta(slug);

@@ -29,6 +29,8 @@ tests/gym/check.py        copy of gym's checker, run on app output (npm run test
 
 All local state is in one IndexedDB database (`slate`), with three object stores: `updates` (Yjs update logs per document), `blobs` (files by SHA-256) and `kv`.
 
+The app runs in one tab at a time: `main.tsx` holds a Web Lock (`app/tabLock.ts`) and another tab shows "Slate is open in another tab or window" with **Use here**, which takes the lock over (the first tab then reloads into that screen). Where Web Locks are missing, tabs still cannot overwrite each other: the kv stores change their entry in one transaction that re-reads it (`core/stores/sharedKv.ts`), and tabs announce kv writes and document updates over BroadcastChannels so the others re-read them.
+
 | Key or id | Content | Repository file |
 | --- | --- | --- |
 | doc `seg:<canvas>:<YYYY-MM>` | canvas segment ([segment.ts](../src/core/canvas/segment.ts)) | `journal/<canvas>/<YYYY-MM>/canvas.yjs` |

@@ -9,10 +9,11 @@
  *   blob <asset hash>      snapshot resources and images
  *
  * Deletions leave a tombstone until sync has removed the item's folder from the repository.
+ * The index is shared with other tabs (sharedKv.ts): every change re-reads it before writing.
  */
 import type { BookMeta, ClippingMeta } from '../model/types';
 import type { SlateDB } from '../storage/idb';
-import { Emitter } from '../util/emitter';
+import { SharedKv } from './sharedKv';
 
 export interface SnapshotAsset {
   /** path used inside snapshot.html, `assets/<hash>.<ext>` */
@@ -45,16 +46,25 @@ interface LibraryIndex {
   deleted: Tombstone[];
 }
 
-export class LibraryStore {
-  readonly onChange = new Emitter<void>();
-  private index: LibraryIndex = { books: [], clippings: [], deleted: [] };
+const normalize = (raw: Partial<LibraryIndex> | undefined): LibraryIndex => ({ books: [], clippings: [], deleted: [], ...(raw ?? {}) });
 
-  private constructor(private db: SlateDB) {}
+export class LibraryStore {
+  private constructor(
+    private db: SlateDB,
+    private kv: SharedKv<LibraryIndex>,
+  ) {}
+
+  /** Fires on every change, here or saved by another tab. */
+  get onChange() {
+    return this.kv.onChange;
+  }
 
   static async open(db: SlateDB): Promise<LibraryStore> {
-    const s = new LibraryStore(db);
-    s.index = { books: [], clippings: [], deleted: [], ...((await db.get<LibraryIndex>('library')) ?? {}) };
-    return s;
+    return new LibraryStore(db, await SharedKv.open<LibraryIndex>(db, 'library', normalize));
+  }
+
+  private get index(): LibraryIndex {
+    return this.kv.get();
   }
 
   books(): BookMeta[] {
@@ -79,14 +89,12 @@ export class LibraryStore {
 
   /** Adds or replaces a book's metadata (the file is stored separately by hash). */
   async putBook(meta: BookMeta): Promise<void> {
-    this.index.books = [...this.index.books.filter((b) => b.id !== meta.id), meta];
-    await this.save();
+    await this.kv.mutate((ix) => ({ ...ix, books: [...ix.books.filter((b) => b.id !== meta.id), meta] }));
   }
 
   async putClipping(meta: ClippingMeta, content?: ClippingContent): Promise<void> {
     if (content) await this.db.set(`clipping:${meta.id}`, content);
-    this.index.clippings = [...this.index.clippings.filter((c) => c.id !== meta.id), meta];
-    await this.save();
+    await this.kv.mutate((ix) => ({ ...ix, clippings: [...ix.clippings.filter((c) => c.id !== meta.id), meta] }));
   }
 
   /**
@@ -100,7 +108,8 @@ export class LibraryStore {
       await this.db.del(`clipping:${id}`);
       return false;
     }
-    this.onChange.emit();
+    // listeners re-read the content; nothing in the index changed, so nothing to push
+    this.onChange.emit({ fromSync: true });
     return true;
   }
 
@@ -111,36 +120,28 @@ export class LibraryStore {
   async deleteBook(id: string): Promise<void> {
     const b = this.book(id);
     if (!b) return;
-    this.index.books = this.index.books.filter((x) => x.id !== id);
-    this.index.deleted = [...this.index.deleted, { kind: 'book', id, slug: b.slug, deleted: Date.now() }];
-    await this.save();
+    const tomb: Tombstone = { kind: 'book', id, slug: b.slug, deleted: Date.now() };
+    await this.kv.mutate((ix) => ({ ...ix, books: ix.books.filter((x) => x.id !== id), deleted: [...ix.deleted.filter((t) => t.id !== id), tomb] }));
   }
 
   async deleteClipping(id: string): Promise<void> {
     const c = this.clipping(id);
     if (!c) return;
-    this.index.clippings = this.index.clippings.filter((x) => x.id !== id);
-    this.index.deleted = [...this.index.deleted, { kind: 'clipping', id, slug: c.slug, deleted: Date.now() }];
+    const tomb: Tombstone = { kind: 'clipping', id, slug: c.slug, deleted: Date.now() };
+    const done = this.kv.mutate((ix) => ({ ...ix, clippings: ix.clippings.filter((x) => x.id !== id), deleted: [...ix.deleted.filter((t) => t.id !== id), tomb] }));
     await this.db.del(`clipping:${id}`);
-    await this.save();
+    await done;
   }
 
   /** Called by sync once the item's folder is gone from the repository. */
   async clearTombstone(id: string): Promise<void> {
-    this.index.deleted = this.index.deleted.filter((t) => t.id !== id);
-    await this.save();
+    await this.kv.mutate((ix) => ({ ...ix, deleted: ix.deleted.filter((t) => t.id !== id) }));
   }
 
   /** Removes an item that was deleted on another device (no tombstone). */
   async forget(id: string): Promise<void> {
-    this.index.books = this.index.books.filter((x) => x.id !== id);
-    this.index.clippings = this.index.clippings.filter((x) => x.id !== id);
+    const done = this.kv.mutate((ix) => ({ ...ix, books: ix.books.filter((x) => x.id !== id), clippings: ix.clippings.filter((x) => x.id !== id) }));
     await this.db.del(`clipping:${id}`);
-    await this.save();
-  }
-
-  private async save() {
-    await this.db.set('library', this.index);
-    this.onChange.emit();
+    await done;
   }
 }

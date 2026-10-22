@@ -20,6 +20,7 @@ import { LibraryStore } from '../stores/library';
 import { FormalizedStore } from '../stores/formalized';
 import { DEFAULT_TIMINGS, SYNC_RUN_ALLOWANCE_MS, SyncEngine, worstCaseSyncDelayMs } from './engine';
 import { parseFrontMatter } from './derived/frontmatter';
+import { asSyncWrite } from '../stores/sharedKv';
 
 beforeAll(useNodeBlob);
 
@@ -736,5 +737,23 @@ describe('clippings and the rebuild', () => {
     await a.draw([clip('k1', T(21), clippingSource('c1', 'Attention'), 'weights')]);
     await a.sync.sync();
     expect(text(repo.files().get('journal/main/2026-10/days/2026-10-21.md'))).toContain('> — [Attention](../../../../library/clippings/2026-10-21-attention/clipping.md)');
+  });
+});
+
+describe('change tracking around sync writes (R4)', () => {
+  it("R4: the owner's edit saved while sync writes a store is still pushed; sync's own write is not a change", async () => {
+    const { repo, dev } = await setup();
+    const a = await dev('a');
+    await a.sync.sync();
+    expect(a.sync.hasLocalChanges()).toBe(false);
+    const book = (id: string): BookMeta => ({ id, slug: id, format: 'pdf', title: id, authors: [], citation: '', fileHash: 'f'.repeat(64), fileName: 'x.pdf', size: 1, added: 1 });
+    await asSyncWrite(() => a.library.putBook(book('from-sync')));
+    expect(a.sync.hasLocalChanges()).toBe(false);
+    const syncWrite = asSyncWrite(() => a.library.putBook(book('also-from-sync')));
+    const ownerWrite = a.library.putBook(book('mine'));
+    await Promise.all([syncWrite, ownerWrite]);
+    expect(a.sync.hasLocalChanges()).toBe(true);
+    await a.sync.sync();
+    expect(repo.text('library/books/mine/book.json')).toBeDefined();
   });
 });

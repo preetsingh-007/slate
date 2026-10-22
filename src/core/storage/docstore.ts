@@ -2,6 +2,7 @@ import * as Y from 'yjs';
 import { SlateDB } from './idb';
 import { Emitter } from '../util/emitter';
 import { LRU } from '../util/lru';
+import { tabChannel } from './tabChannel';
 
 /** Origin attached to transactions that come from a sync transport. */
 export interface RemoteOrigin {
@@ -10,6 +11,9 @@ export interface RemoteOrigin {
 
 export const LOCAL_ORIGIN = 'local';
 const LOAD_ORIGIN = Symbol('persistence-load');
+/** Origin of updates saved by another tab of the app (R1), already in IndexedDB. */
+export const TAB_TRANSPORT = 'tab';
+const TAB_ORIGIN: RemoteOrigin = { transport: TAB_TRANSPORT };
 
 export interface DocUpdateEvent {
   docId: string;
@@ -50,6 +54,8 @@ export class DocStore {
   private writeChain: Promise<unknown> = Promise.resolve();
   private knownIds: Set<string> | null = null;
   private appendCounts = new Map<string, number>();
+  /** R1: updates saved by another tab reach this tab's open documents and change tracking */
+  private channel: BroadcastChannel | null;
 
   constructor(
     readonly db: SlateDB,
@@ -60,12 +66,24 @@ export class DocStore {
       entry.doc.destroy();
       return true;
     });
+    this.channel = tabChannel(db, 'docs');
+    this.channel?.addEventListener('message', (e: MessageEvent<{ docId: string; update: Uint8Array }>) => this.fromTab(e.data.docId, e.data.update));
     if (typeof window !== 'undefined') {
       const flush = () => void this.flush();
       window.addEventListener('pagehide', flush);
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') flush();
       });
+    }
+  }
+
+  private fromTab(docId: string, update: Uint8Array) {
+    this.knownIds?.add(docId);
+    const live = this.loaded.get(docId)?.doc;
+    if (live) Y.applyUpdate(live, update, TAB_ORIGIN);
+    else {
+      this.onUpdate.emit({ docId, update, from: TAB_TRANSPORT });
+      this.onDocChanged.emit({ docId, remote: true });
     }
   }
 
@@ -118,7 +136,8 @@ export class DocStore {
     doc.on('update', (update: Uint8Array, origin: unknown) => {
       if (origin === LOAD_ORIGIN) return;
       const from = isRemote(origin) ? origin.transport : undefined;
-      this.enqueue(docId, update);
+      // another tab saved it already
+      if (from !== TAB_TRANSPORT) this.enqueue(docId, update);
       this.onUpdate.emit({ docId, update, from });
       this.onDocChanged.emit({ docId, remote: !!from });
     });
@@ -233,6 +252,7 @@ export class DocStore {
         const merged = updates.length === 1 ? updates[0] : Y.mergeUpdates(updates);
         try {
           await this.db.putUpdate(docId, merged);
+          this.channel?.postMessage({ docId, update: merged });
         } catch (err) {
           // keep the data: put it back in front of anything newer and retry later
           failed = err as Error;

@@ -19,6 +19,7 @@ import { Emitter } from '../util/emitter';
 import { GIT_TRANSPORT, type SyncContext, type SyncDeps } from './context';
 import { readSegment, type SegmentContent } from './derived/segment';
 import { parseClippingMarkdown } from './derived/library';
+import { asSyncWrite } from '../stores/sharedKv';
 import { expiryMessage, expiryState } from './expiry';
 import { GITHUB_API, GitHubRemote, parseRepo } from './git/github';
 import { AuthError, ConflictError, GitRemoteError, NotFoundError, type RepoInfo } from './git/remote';
@@ -85,7 +86,6 @@ export function worstCaseSyncDelayMs(t: SyncTimings = DEFAULT_TIMINGS): number {
 }
 
 /** Documents edited in another tab are picked up by a full scan about this often. */
-const FULL_SCAN_MS = 270_000;
 
 const DAY = 24 * 60 * 60 * 1000;
 const MAX_ATTEMPTS = 4;
@@ -133,8 +133,8 @@ export class SyncEngine {
   private dirty = new Map<string, number>();
   private gen = 0;
   private storesDirty = false;
+  /** the first push after start scans every local document (changes made before this session) */
   private fullScan = true;
-  private quiet = 0;
   private paused = false;
   private warnings: string[] = [];
   private meta: Meta = {};
@@ -167,9 +167,9 @@ export class SyncEngine {
         this.localChange();
       }),
       deps.docs.onDocChanged.on(({ docId }) => this.segCache.delete(docId)),
-      deps.canvases.onChange.on(() => this.storeChange()),
-      deps.library.onChange.on(() => this.storeChange()),
-      deps.settings.onChange.on(() => this.settingsChange()),
+      deps.canvases.onChange.on((c) => !c.fromSync && this.storeChange()),
+      deps.library.onChange.on((c) => !c.fromSync && this.storeChange()),
+      deps.settings.onChange.on((c) => this.settingsChange(c.fromSync)),
     );
     this.ready = this.init();
   }
@@ -269,11 +269,11 @@ export class SyncEngine {
     await this.configureFromSecrets();
   }
 
-  private settingsChange() {
+  private settingsChange(fromSync: boolean) {
     const synced = this.deps.settings.get();
     if (synced !== this.lastSettings) {
       this.lastSettings = synced;
-      if (!this.quiet) this.storeChange();
+      if (!fromSync) this.storeChange();
     }
     void this.configureFromSecrets();
     this.refreshStatus();
@@ -282,7 +282,6 @@ export class SyncEngine {
   // ================================================================ change tracking
 
   private storeChange() {
-    if (this.quiet) return;
     this.storesDirty = true;
     this.localChange();
   }
@@ -364,14 +363,8 @@ export class SyncEngine {
       remote: this.remote!,
       st,
       save: () => saveState(this.deps.db, this.remote!.id, st),
-      quietly: async (fn) => {
-        this.quiet++;
-        try {
-          return await fn();
-        } finally {
-          this.quiet--;
-        }
-      },
+      // only the writes fn starts synchronously are sync's: the owner's edits saved meanwhile still count
+      quietly: (fn) => asSyncWrite(fn),
       warn: (m) => {
         if (!this.warnings.includes(m)) this.warnings.push(m);
       },
@@ -501,11 +494,10 @@ export class SyncEngine {
     });
     listen(win, 'online', () => void this.sync());
     listen(win, 'offline', () => this.refreshStatus('offline', 'Offline. Changes are saved on this device and sync when you are back online.'));
-    let ticks = 0;
+    // Only one tab runs the app (main.tsx holds a Web Lock); without Web Locks, a second tab's
+    // document updates reach this tab's open documents over a BroadcastChannel (DocStore) and so
+    // its change tracking, and its kv writes are re-read before each write (sharedKv.ts).
     const interval = setInterval(() => {
-      // documents edited in another tab of this browser never reach this tab's change tracking;
-      // a full scan every few minutes picks them up (only the tab holding the lock syncs)
-      if (++ticks % Math.max(1, Math.round(FULL_SCAN_MS / this.timings.pullIntervalMs)) === 0) this.fullScan = true;
       this.refreshStatus();
       if (!doc || doc.visibilityState === 'visible') void this.sync();
     }, this.timings.pullIntervalMs);

@@ -35,7 +35,11 @@ function txDone(tx: IDBTransaction): Promise<void> {
 }
 
 export class SlateDB {
-  private constructor(private db: IDBDatabase) {}
+  private constructor(
+    private db: IDBDatabase,
+    /** the database's name (tabs on the same database share it) */
+    readonly name: string,
+  ) {}
 
   static async open(name: string): Promise<SlateDB> {
     const open = indexedDB.open(name, DB_VERSION);
@@ -48,7 +52,7 @@ export class SlateDB {
       if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
     };
     const db = await req(open);
-    return new SlateDB(db);
+    return new SlateDB(db, name);
   }
 
   close() {
@@ -167,6 +171,24 @@ export class SlateDB {
     const tx = this.db.transaction('kv', 'readwrite');
     tx.objectStore('kv').put(value, key);
     await txDone(tx);
+  }
+
+  /**
+   * Read-modify-write of one kv entry in ONE readwrite transaction, so a write from another tab
+   * between the read and the write cannot be lost. `fn` must be synchronous. Returns the value
+   * written.
+   */
+  async update<T>(key: string, fn: (current: T | undefined) => T): Promise<T> {
+    const tx = this.db.transaction('kv', 'readwrite');
+    const store = tx.objectStore('kv');
+    let out!: T;
+    const r = store.get(key);
+    r.onsuccess = () => {
+      out = fn(r.result as T | undefined);
+      store.put(out, key);
+    };
+    await txDone(tx);
+    return out;
   }
 
   async del(key: string): Promise<void> {

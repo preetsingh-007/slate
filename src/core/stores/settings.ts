@@ -5,6 +5,7 @@
 import type { SyncedSettings } from '../model/types';
 import type { SlateDB } from '../storage/idb';
 import { Emitter } from '../util/emitter';
+import { SharedKv, type StoreChange } from './sharedKv';
 
 export interface DeviceSecrets {
   /** fine-grained personal access token, gym repository only */
@@ -52,24 +53,32 @@ export const DEFAULT_PREFS: DevicePrefs = {
   minimap: true,
 };
 
+/**
+ * The three entries are shared with other tabs (sharedKv.ts): every change re-reads the entry
+ * before writing, so two tabs never overwrite each other's settings.
+ */
 export class SettingsStore {
-  readonly onChange = new Emitter<void>();
-  private synced: SyncedSettings = DEFAULT_SETTINGS;
-  private secrets: DeviceSecrets = {};
-  private prefs: DevicePrefs = DEFAULT_PREFS;
+  /** Fires on every change of any of the three, here or saved by another tab. */
+  readonly onChange = new Emitter<StoreChange>();
 
-  private constructor(private db: SlateDB) {}
+  private constructor(
+    private synced: SharedKv<SyncedSettings>,
+    private secrets: SharedKv<DeviceSecrets>,
+    private prefs: SharedKv<DevicePrefs>,
+  ) {
+    for (const kv of [synced, secrets, prefs] as SharedKv<unknown>[]) kv.onChange.on((c) => this.onChange.emit(c));
+  }
 
   static async open(db: SlateDB): Promise<SettingsStore> {
-    const s = new SettingsStore(db);
-    s.synced = { ...DEFAULT_SETTINGS, ...((await db.get<SyncedSettings>('settings')) ?? {}) };
-    s.secrets = (await db.get<DeviceSecrets>('secrets')) ?? {};
-    s.prefs = { ...DEFAULT_PREFS, ...((await db.get<DevicePrefs>('prefs')) ?? {}) };
-    return s;
+    return new SettingsStore(
+      await SharedKv.open<SyncedSettings>(db, 'settings', (raw) => ({ ...DEFAULT_SETTINGS, ...(raw ?? {}) })),
+      await SharedKv.open<DeviceSecrets>(db, 'secrets', (raw) => raw ?? {}),
+      await SharedKv.open<DevicePrefs>(db, 'prefs', (raw) => ({ ...DEFAULT_PREFS, ...(raw ?? {}) })),
+    );
   }
 
   get(): SyncedSettings {
-    return this.synced;
+    return this.synced.get();
   }
 
   /**
@@ -78,36 +87,30 @@ export class SettingsStore {
    * scrolling a book here does not make this device's older pens win over another device's.
    */
   async update(patch: Partial<SyncedSettings>, opts: { touch?: boolean } = {}): Promise<void> {
-    this.synced = { ...this.synced, ...patch, updated: opts.touch === false ? this.synced.updated : Date.now() };
-    await this.db.set('settings', this.synced);
-    this.onChange.emit();
+    const now = Date.now();
+    await this.synced.mutate((s) => ({ ...s, ...patch, updated: opts.touch === false ? s.updated : now }));
   }
 
-  /** Replaces the settings with a merged version (from sync). */
-  async replace(next: SyncedSettings): Promise<void> {
-    this.synced = { ...DEFAULT_SETTINGS, ...next };
-    await this.db.set('settings', this.synced);
-    this.onChange.emit();
+  /** Merges the repository's settings.json into the settings as they are now (from sync). */
+  async mergeFromRemote(remote: SyncedSettings): Promise<void> {
+    const full = { ...DEFAULT_SETTINGS, ...remote };
+    await this.synced.mutate((s) => ({ ...DEFAULT_SETTINGS, ...mergeSettings(s, full) }));
   }
 
   getSecrets(): DeviceSecrets {
-    return this.secrets;
+    return this.secrets.get();
   }
 
   async setSecrets(patch: Partial<DeviceSecrets>): Promise<void> {
-    this.secrets = { ...this.secrets, ...patch };
-    await this.db.set('secrets', this.secrets);
-    this.onChange.emit();
+    await this.secrets.mutate((s) => ({ ...s, ...patch }));
   }
 
   getPrefs(): DevicePrefs {
-    return this.prefs;
+    return this.prefs.get();
   }
 
   async setPrefs(patch: Partial<DevicePrefs>): Promise<void> {
-    this.prefs = { ...this.prefs, ...patch };
-    await this.db.set('prefs', this.prefs);
-    this.onChange.emit();
+    await this.prefs.mutate((p) => ({ ...p, ...patch }));
   }
 }
 
