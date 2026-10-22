@@ -263,3 +263,34 @@ describe('links and front matter (G9)', () => {
     expect(parseFrontMatter(fm + 'body').fields).toEqual({ a: '', b: '[x/y, "p, q"]', c: '"quoted"' });
   });
 });
+
+describe("links as check.py sees them (G9)", () => {
+  it("G9: findLinks finds exactly the links of check.py's link_targets, with Python's line semantics", async () => {
+    const { execFileSync } = await import('node:child_process');
+    const samples = [
+      'Para one ```\n[link](nowhere.md)\n```\nend',
+      'end `x\r[l2](missing2.md)\ry` and `a\r\nb` [l5](five.md)',
+      'x\r```\r[hidden](h.md)\r```\r[shown](s.md)',
+      '`a [l4](missing4.md)` [n](\u0085n.md\u0085) [f](﻿f.md)',
+      '[a](\x1cb.md) [c](d.md "t") [e]( <f.md> ) ![i](j.png)',
+      '~~~\n[in](fence.md)\n  ~~~\n[out](o.md)\n```\n[unclosed](u.md)',
+      '[multi\nline](m.md) [x]\n(y.md)',
+    ];
+    const script = [
+      'import json, re, sys',
+      'LINK = re.compile(r"!?\\[[^\\]]*\\]\\(\\s*<?([^)\\s>]+)>?(?:\\s+\\"[^\\"]*\\")?\\s*\\)")',
+      'FENCE = re.compile(r"^[ \\t]*(```|~~~).*?^[ \\t]*\\1", re.S | re.M)',
+      'INLINE_CODE = re.compile(r"`[^`\\n]*`")',
+      'out = []',
+      'for s in json.load(sys.stdin):',
+      '    s = s.replace("\\r\\n", "\\n").replace("\\r", "\\n")',
+      '    out.append(LINK.findall(INLINE_CODE.sub("", FENCE.sub("", s))))',
+      'print(json.dumps(out))',
+    ].join('\n');
+    const queue = queueMarkdown([{ id: 'm1', kind: 'note', topic: 'a\u2028b\x85c\x1cd', created: 0, path: 'journal/main/2026-10/marks/m1.md', date: '2026-10-21' }]);
+    const queueLines = JSON.parse(execFileSync('python3', ['-c', 'import json,sys; print(json.dumps(sys.stdin.read().splitlines()))'], { input: queue }).toString()) as string[];
+    expect(queueLines.filter((l) => l.startsWith('- '))).toHaveLength(1);
+    const python = JSON.parse(execFileSync('python3', ['-c', script], { input: JSON.stringify(samples) }).toString()) as string[][];
+    expect(samples.map((s) => findLinks(s).map((l) => l.target))).toEqual(python);
+  });
+});

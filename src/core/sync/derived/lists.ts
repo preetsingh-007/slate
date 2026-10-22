@@ -16,6 +16,7 @@
 import type { MarkKind } from '../../model/types';
 import { extractTasks } from '../../markdown/tasks';
 import { QUEUE_PATH, TODOS_PATH, relativeLink, resolveLink } from '../paths';
+import { oneLine } from './frontmatter';
 
 export interface QueueEntry {
   id: string;
@@ -29,7 +30,7 @@ export interface QueueEntry {
 }
 
 export function queueLine(e: QueueEntry): string {
-  return `- [${e.id}](${relativeLink(QUEUE_PATH, e.path)}) · ${e.kind} · ${e.topic || 'no topic'} · ${e.date}`;
+  return `- [${e.id}](${relativeLink(QUEUE_PATH, e.path)}) · ${e.kind} · ${oneLine(e.topic).trim() || 'no topic'} · ${e.date}`;
 }
 
 const QUEUE_LINE = /^- \[([a-z0-9]+(?:-[a-z0-9]+)*)\]\(([^)\s]+)\) · (note|problem|solution|question) · (.+) · (\d{4}-\d{2}-\d{2})$/;

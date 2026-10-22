@@ -8,9 +8,20 @@ export type FrontMatterValue = string | string[];
 
 const RESERVED = /^(true|false|null|yes|no|on|off|~)$/i;
 
+/**
+ * Characters that end a line for check.py: Python's `str.splitlines()` (after `read_text` turned
+ * '\r' into '\n'). A value containing one would spill into a line of its own (G9).
+ */
+const PY_LINE_BREAKS = /\s*[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]+\s*/g;
+
+/** `value` on one line as check.py splits lines. */
+export function oneLine(value: string): string {
+  return value.replace(PY_LINE_BREAKS, ' ');
+}
+
 /** One-line YAML scalar for a string. */
 export function yamlScalar(value: string): string {
-  const v = value.replace(/\s*[\r\n]+\s*/g, ' ').trim();
+  const v = value.replace(PY_LINE_BREAKS, ' ').trim();
   if (v === '') return '';
   const plain = /^[A-Za-z0-9_./(][^\n]*$/.test(v) && !/: |\s#|:$|[[\]{},"'`]/.test(v) && !RESERVED.test(v) && !/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(v);
   return plain ? v : JSON.stringify(v);

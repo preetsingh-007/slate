@@ -8,9 +8,12 @@
  */
 import { normalizePath, dirOf } from '../paths';
 
-// check.py's patterns, ported verbatim
-const LINK = /!?\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g;
-const FENCE = /^[ \t]*(```|~~~)[\s\S]*?^[ \t]*\1/gm;
+// check.py's patterns, ported with Python's semantics: `\s` is Python's whitespace (it includes
+// \x1c-\x1f and \x85; JavaScript's includes \ufeff instead), and re.M's `^` matches only after
+// '\n' (JavaScript's `m` flag also matches after '\r', U+2028 and U+2029)
+const PY_WS = '\\t\\n\\v\\f\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000';
+const LINK = new RegExp(`!?\\[[^\\]]*\\]\\([${PY_WS}]*<?([^)${PY_WS}>]+)>?(?:[${PY_WS}]+"[^"]*")?[${PY_WS}]*\\)`, 'g');
+const FENCE = /(?:^|(?<=\n))[ \t]*(```|~~~)[\s\S]*?(?<=\n)[ \t]*\1/g;
 const INLINE_CODE = /`[^`\n]*`/g;
 
 interface Stripped {
@@ -46,9 +49,28 @@ export interface LinkHit {
   paren: number;
 }
 
+/** The text as check.py's `read_text` sees it: '\r\n' and '\r' become '\n' (universal newlines). */
+function pythonText(md: string): Stripped {
+  if (!md.includes('\r')) return { text: md, map: [...md].map((_, i) => i) };
+  const chars: string[] = [];
+  const map: number[] = [];
+  for (let i = 0; i < md.length; i++) {
+    if (md[i] === '\r') {
+      chars.push('\n');
+      map.push(i);
+      if (md[i + 1] === '\n') i++;
+    } else {
+      chars.push(md[i]);
+      map.push(i);
+    }
+  }
+  return { text: chars.join(''), map };
+}
+
 /** Links check.py would see in `md` (code fences and inline code removed first). */
 export function findLinks(md: string): LinkHit[] {
-  const a = strip(md, FENCE);
+  const py = pythonText(md);
+  const a = strip(py.text, FENCE, py.map);
   const b = strip(a.text, INLINE_CODE, a.map);
   const out: LinkHit[] = [];
   LINK.lastIndex = 0;

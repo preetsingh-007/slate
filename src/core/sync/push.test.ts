@@ -5,6 +5,7 @@ import { device, type TestDevice } from './testing/device';
 import { useNodeBlob } from './testing/nodeBlob';
 import { runCheckPy } from './testing/checkpy';
 import { annotationsDocId } from '../stores/docIds';
+import { mark, text as textBox } from './testing/fixtures';
 import type { BookMeta, ClippingMeta } from '../model/types';
 
 beforeAll(useNodeBlob);
@@ -111,4 +112,21 @@ describe('clipping content round trip (L11, G9)', () => {
       expect(check.ok, check.output).toBe(true);
     });
   }
+});
+
+describe("Python's line semantics in generated Markdown (G9)", () => {
+  const T = (d: number, h = 10) => new Date(2026, 9, d, h).getTime();
+
+  it('G9: line separators in a mark comment and code-like text in a text box pass check.py', async () => {
+    const { repo, dev } = await setup();
+    const a = await dev('a');
+    const content = 'Para one\u2028```\n[link](nowhere.md)\n```\nend `x\r[l2](missing2.md)\ry` and \u0085[l3](missing3.md) `a\u2028[l4](missing4.md)`';
+    await a.draw([textBox('t1', T(21), content)], [mark('m1', T(21, 11), 'note', ['t1'], undefined, { comment: 'see p.\u2028id: other\u0085kind: x\u000bday: y\fz\x1ctopic: w' })]);
+    await a.sync.sync();
+    const md = repo.text('journal/main/2026-10/marks/m1.md')!;
+    const fm = md.split('---\n')[1];
+    expect(fm.split(/\r\n|[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/).filter((l) => l.startsWith('id:'))).toEqual(['id: m1']);
+    const check = runCheckPy(repo);
+    expect(check.ok, check.output).toBe(true);
+  });
 });
