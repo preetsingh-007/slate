@@ -23,7 +23,7 @@ import { DERIVED_VERSION, type SyncContext } from './context';
 import { planCommits, type PlannedChange } from './commits';
 import { dayMarkdown, daySvg, segmentDays } from './derived/days';
 import { journalReadme } from './derived/journalReadme';
-import { annotationsMarkdown, clippingMarkdown, libraryReadme } from './derived/library';
+import { annotationsMarkdown, clippingMarkdown, libraryReadme, neutralizeClippingMarkdown } from './derived/library';
 import { neutralizeLinks, pathExists } from './derived/links';
 import { parseQueue, parseTodos, queueMarkdown, todosMarkdown, uncheckedTasks, type CanvasTodo, type QueueEntry } from './derived/lists';
 import { markMarkdown, markPngSize, markSvg, type MarkObject } from './derived/marks';
@@ -417,7 +417,8 @@ export async function push(ctx: SyncContext, opts: PushOptions = {}): Promise<Pu
   for (const [path, w] of [...plan.writes]) {
     if (!path.endsWith('.md')) continue;
     const text = dec.decode(w.content);
-    const safe = neutralizeLinks(text, path, linkExists);
+    // clipping content must come back exactly (L11): its escapes are recorded and undone on parse
+    const safe = /^library\/clippings\/[^/]+\/clipping\.md$/.test(path) ? neutralizeClippingMarkdown(text, path, linkExists) : neutralizeLinks(text, path, linkExists);
     if (safe !== text) await plan.text(path, safe);
   }
 

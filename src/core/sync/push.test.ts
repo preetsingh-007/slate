@@ -87,3 +87,28 @@ describe('deleting library items (L13, G9)', () => {
     expect(a.library.tombstones()).toEqual([]);
   });
 });
+
+describe('clipping content round trip (L11, G9)', () => {
+  const cases: [string, ClippingMeta['format'], string][] = [
+    ['code', 'plain', 'for (const h of list) handlers[0](event);\nresult = funcs[i](x)\n'],
+    ['links', 'markdown', '# Notes\n\nSee [the docs](docs/intro.md) and ![fig](img/a.png)\n\n```\n[kept](in-fence.md)\n```\nand `[x](y.md)` and [web](https://e.org/a)   \n\n\n'],
+    ['escaped', 'markdown', 'Already escaped: [a]\\(b.md) and \\\\(c) and a [t](x.md "title")\r\nwindows\rline [r](r.md)'],
+    ['whitespace', 'plain', '\n\n  leading and trailing  \t\n\n'],
+    ['brackets', 'markdown', 'a [b\n\nc](d.md) [e]( f.md ) [g](<h i.md>)'],
+  ];
+  for (const [name, format, original] of cases) {
+    it(`L11: ${name} content comes back byte for byte on another device, and check.py accepts it (G9)`, async () => {
+      const { repo, dev } = await setup();
+      const a = await dev('a');
+      const b = await dev('b');
+      const meta: ClippingMeta = { id: 'c1', slug: `2026-10-21-${name}`, origin: 'clipboard', title: 'Code [x](y.md) `z`', format, added: 1, contentHash: 'x', url: 'https://e.org/a[1]' };
+      await a.library.putClipping(meta, { markdown: original, assets: [] });
+      await a.sync.sync();
+      await b.sync.sync();
+      expect(await b.sync.ensureClipping('c1')).toBe(true);
+      expect((await b.library.clippingContent('c1'))!.markdown).toBe(original);
+      const check = runCheckPy(repo);
+      expect(check.ok, check.output).toBe(true);
+    });
+  }
+});

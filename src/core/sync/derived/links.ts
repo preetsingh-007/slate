@@ -82,7 +82,16 @@ export function linkPath(fromFile: string, target: string): string | null {
  * `exists` receives normalised repository paths ('' is the root) and must accept folders.
  */
 export function neutralizeLinks(md: string, file: string, exists: (path: string) => boolean): string {
+  return neutralizeLinksTracked(md, file, exists).text;
+}
+
+/**
+ * `neutralizeLinks`, also returning where the backslashes went (ascending positions in the
+ * result), so content that must come back exactly (clippings, L11) can remove them again.
+ */
+export function neutralizeLinksTracked(md: string, file: string, exists: (path: string) => boolean): { text: string; inserted: number[] } {
   let text = md;
+  let inserted: number[] = [];
   // escaping one link can never create another, but loop defensively until stable
   for (let round = 0; round < 4; round++) {
     const broken = findLinks(text).filter((l) => {
@@ -90,10 +99,14 @@ export function neutralizeLinks(md: string, file: string, exists: (path: string)
       const p = linkPath(file, l.target);
       return p === null || !exists(p);
     });
-    if (!broken.length) return text;
-    for (const l of broken.sort((x, y) => y.paren - x.paren)) text = text.slice(0, l.paren) + '\\' + text.slice(l.paren);
+    if (!broken.length) break;
+    for (const l of broken.sort((x, y) => y.paren - x.paren)) {
+      text = text.slice(0, l.paren) + '\\' + text.slice(l.paren);
+      inserted = inserted.map((i) => (i >= l.paren ? i + 1 : i));
+      inserted.push(l.paren);
+    }
   }
-  return text;
+  return { text, inserted: inserted.sort((a, b) => a - b) };
 }
 
 /** Builds an `exists` predicate over a set of file paths (folders exist when they contain a file). */

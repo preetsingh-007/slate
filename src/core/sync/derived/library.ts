@@ -5,6 +5,7 @@
 import type { Annotation, BookMeta, ClippingMeta } from '../../model/types';
 import { isoDate, isoDateTime } from '../../util/time';
 import { frontMatter, parseFrontMatter } from './frontmatter';
+import { neutralizeLinksTracked } from './links';
 import { textBlock } from './segment';
 
 const cell = (s: string) => s.replace(/\s+/g, ' ').replace(/\|/g, '\\|').replace(/([[\]])/g, '\\$1').trim();
@@ -74,22 +75,57 @@ export function annotationsMarkdown(book: BookMeta, annotations: readonly Annota
   return out.join('\n').replace(/\n+$/, '') + '\n';
 }
 
-/** `clipping.md`: a little front matter (the full metadata is in meta.json) and the Markdown. */
+/**
+ * `clipping.md`: a little front matter (the full metadata is in meta.json) and the content,
+ * exactly as stored (L11: it comes back byte for byte on every device). The front matter holds
+ * no brackets or backticks, so it never takes part in a link of the body (G9).
+ */
 export function clippingMarkdown(meta: ClippingMeta, markdown: string): string {
+  const plain = (s: string) => s.replace(/\[/g, '(').replace(/\]/g, ')').replace(/`/g, "'");
+  const url = (s: string) => s.replace(/[[\]`]/g, (ch) => '%' + ch.charCodeAt(0).toString(16).toUpperCase());
   return (
     frontMatter([
-      ['title', meta.title],
+      ['title', plain(meta.title)],
       ['origin', meta.origin],
-      ['source', meta.url ?? meta.sourceLabel ?? ''],
+      ['source', meta.url ? url(meta.url) : plain(meta.sourceLabel ?? '')],
       ['added', isoDateTime(meta.added)],
     ]) +
     '\n' +
-    markdown.replace(/\s+$/, '') +
+    markdown +
     '\n'
   );
 }
 
-/** The Markdown body of a clipping.md. */
+/**
+ * G9 without changing the content (L11): escapes the broken relative links of a clipping.md's
+ * body like every other Markdown file, and records where the backslashes went in an `escapes`
+ * front-matter field so `parseClippingMarkdown` removes exactly those.
+ */
+export function neutralizeClippingMarkdown(text: string, file: string, exists: (path: string) => boolean): string {
+  const end = text.startsWith('---\n') ? text.indexOf('\n---\n', 4) : -1;
+  if (end < 0) return text;
+  const bodyStart = end + 5;
+  const { text: safe, inserted } = neutralizeLinksTracked(text, file, exists);
+  if (!inserted.length) return text;
+  // the front matter has no links, so every backslash went into the body
+  const shift = inserted.filter((i) => i < bodyStart).length;
+  if (shift) return safe;
+  const offsets = inserted.map((i) => i - bodyStart);
+  return `${text.slice(0, end)}\nescapes: ${offsets.join(' ')}${safe.slice(end)}`;
+}
+
+/** The content of a clipping.md, exactly as it was stored (see `clippingMarkdown`). */
 export function parseClippingMarkdown(text: string): string {
-  return parseFrontMatter(text).body.replace(/\n$/, '');
+  const { fields, body } = parseFrontMatter(text);
+  let out = body.endsWith('\n') ? body.slice(0, -1) : body;
+  // positions in the body as written; the separator line after the front matter is not counted
+  const lead = text.length - body.length - (text.startsWith('---\n') ? text.indexOf('\n---\n', 4) + 5 : 0);
+  const offsets = (fields.escapes ?? '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((x) => Number(x) - lead)
+    .filter((x) => Number.isInteger(x) && x >= 0)
+    .sort((a, b) => b - a);
+  for (const i of offsets) if (out[i] === '\\') out = out.slice(0, i) + out.slice(i + 1);
+  return out;
 }
