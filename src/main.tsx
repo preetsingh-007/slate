@@ -8,6 +8,7 @@ import { useApp } from './ui/app/store';
 import { restoreLocalLayout, startLayoutSync } from './ui/app/layoutSync';
 import * as registries from './ui/common/registries';
 import { useLibraryUi } from './ui/library/state';
+import { recoverDrafts } from './ui/common/recoverDrafts';
 import 'katex/dist/katex.min.css';
 import './ui/styles/global.css';
 
@@ -38,6 +39,12 @@ async function boot(root: Root, lock: TabLock) {
       });
     }
     void requestPersistentStorage();
+    // Durability NFR: work a closed or crashed tab left as drafts goes into the store before the
+    // views open. Only the tab holding the app's lock gets here (another tab shows OtherTab), so
+    // a draft is recovered once (without Web Locks, recovery is idempotent by id but for a to-do
+    // two tabs started at the same moment could both add); a slow recovery finishes in the
+    // background.
+    await Promise.race([recoverDrafts(services).catch(() => 0), new Promise((r) => setTimeout(r, 2000))]);
     // P3: reopen as it was (local first), then keep the layout saved and synced
     const canvasExists = (slug: string) => !!services.canvases.meta(slug);
     restoreLocalLayout({ canvasExists });

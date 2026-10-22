@@ -113,3 +113,26 @@ export function expandGroups(ids: Iterable<string>, get: (id: string) => CanvasO
   for (const g of groups) for (const id of members(g)) out.add(id);
   return [...out];
 }
+
+/** C8: the image a stroke is drawn over (most of its points inside the frame), topmost first. */
+export function imageUnder(query: (r: Rect) => Iterable<CanvasObject>, pts: number[]): string | undefined {
+  const flat: Pt[] = [];
+  for (let i = 0; i + 1 < pts.length; i += 3) flat.push({ x: pts[i], y: pts[i + 1] });
+  const images = [...query(bbox(flat))].filter((o) => o.kind === 'image').sort(compareZ).reverse();
+  for (const img of images) {
+    const poly = rotatedRectPolygon(img);
+    let inside = 0;
+    for (const p of flat) if (pointInPolygon(p, poly)) inside++;
+    if (inside / flat.length >= 0.6) return img.id;
+  }
+  return undefined;
+}
+
+/** The corners of an object's frame, rotated with it. */
+function rotatedRectPolygon(o: CanvasObject): Pt[] {
+  const poly = rectPolygon(o);
+  if (!o.rotation) return poly;
+  const c = { x: o.x + o.w / 2, y: o.y + o.h / 2 };
+  const a = (o.rotation * Math.PI) / 180;
+  return poly.map((p) => ({ x: c.x + (p.x - c.x) * Math.cos(a) - (p.y - c.y) * Math.sin(a), y: c.y + (p.x - c.x) * Math.sin(a) + (p.y - c.y) * Math.cos(a) }));
+}
