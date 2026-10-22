@@ -79,7 +79,7 @@ test.describe('P3: panes, tabs and places survive reopening', () => {
   });
 });
 
-test.describe('P2: narrow screens (iPhone, iPad Slide Over)', () => {
+test.describe('P2: narrow screens (iPhone, iPad Slide Over) @touch', () => {
   test.use({ viewport: { width: 390, height: 844 }, permissions: ['clipboard-read', 'clipboard-write'] });
 
   test('one pane at a time with a quick switch; captures wait in the carry tray until dropped on the canvas', async ({ page }) => {

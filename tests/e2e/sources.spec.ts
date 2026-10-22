@@ -1,7 +1,8 @@
 /**
  * Milestone 4 gate (P1, S1–S6): for every source type, lasso a region in the side pane, send it
  * to the real main canvas, and come back through the clip's source badge to the exact location,
- * flashed; then the same return with the network off.
+ * flashed; then the same return with the network off. Runs on the desktop and tablet profiles
+ * (the badge is tapped with a real touch there).
  */
 import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import { makeEpub, makePaperPdf } from '../../src/test/fixtures';
@@ -46,7 +47,9 @@ async function followBadge(page: Page, clipId: string) {
   await withCanvas(page, `(h) => h.engine.showRect(h.ctl.boundsOf(['${clipId}']), false)`);
   const badge = page.locator(`.pane-canvas .cv-clip[data-id="${clipId}"] .cv-badge`);
   await expect(badge).toBeVisible();
-  await badge.click();
+  // a real tap on the tablet profile
+  if (test.info().project.use.hasTouch) await badge.tap();
+  else await badge.click();
 }
 
 /** Follows the badge online, then again offline; `flash` is the flashed location in the source. */
@@ -62,7 +65,7 @@ async function returnThroughBadge(page: Page, context: BrowserContext, clipId: s
   await context.setOffline(false);
 }
 
-test.describe('Milestone 4: lasso onto the canvas and back through the badge, also offline', () => {
+test.describe('Milestone 4: lasso onto the canvas and back through the badge, also offline @touch', () => {
   test('S1–S6 PDF: a region of a page, re-rendered, with its text in reading order', async ({ page, context }) => {
     await openApp(page);
     await importFile(page, 'paper.pdf', await makePaperPdf(), 'application/pdf');
