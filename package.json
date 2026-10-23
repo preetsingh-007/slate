@@ -14,7 +14,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:gym": "node scripts/gym-compat.mjs"
+    "test:gym": "node scripts/gym-compat.mjs",
+    "demo:record": "node scripts/demo/record.mjs"
   },
   "engines": {
     "node": ">=20"
