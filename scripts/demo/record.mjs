@@ -12,11 +12,11 @@
  *
  * See scripts/demo/README.md.
  */
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
-import { assemble } from './lib/assemble.mjs';
+import { assemble, clipParts } from './lib/assemble.mjs';
 import { endHtml, recordCard, titleHtml } from './lib/cards.mjs';
 import { gymFiles, makeAssets, webPages } from './lib/content.mjs';
 import { startServer } from './lib/server.mjs';
@@ -89,13 +89,7 @@ async function main() {
 }
 
 async function finish() {
-  const ids = ['title', ...SEGMENTS.map((s) => s.id), 'end'];
-  const parts = ids.map((id) => {
-    const file = join(clips, `${id}.mp4`);
-    const meta = existsSync(join(clips, `${id}.json`)) ? JSON.parse(readFileSync(join(clips, `${id}.json`), 'utf8')) : { marks: [] };
-    const seg = SEGMENTS.find((s) => s.id === id);
-    return { id, file, title: seg?.title ?? (id === 'title' ? 'Title' : 'End'), marks: meta.marks ?? [], trailer: seg?.trailer ?? [] };
-  });
+  const parts = clipParts(clips, SEGMENTS);
   const missing = parts.filter((p) => !existsSync(p.file));
   if (missing.length) {
     console.log(`Not assembled yet; still to record: ${missing.map((p) => p.id).join(', ')}`);

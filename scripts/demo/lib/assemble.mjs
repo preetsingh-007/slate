@@ -2,9 +2,41 @@
  * Puts the recorded clips together: the full video (concatenated without re-encoding), the
  * chapter list, a trailer cut from each segment's highlights, and a poster frame.
  */
-import { writeFileSync, mkdirSync, rmSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { duration, ffmpeg, fmtTime } from './util.mjs';
+
+/** The recorded clips in video order (title, the segments, end) with their marks and highlights. */
+export function clipParts(clips, segments) {
+  const ids = ['title', ...segments.map((s) => s.id), 'end'];
+  return ids.map((id) => {
+    const file = join(clips, `${id}.mp4`);
+    const meta = existsSync(join(clips, `${id}.json`)) ? JSON.parse(readFileSync(join(clips, `${id}.json`), 'utf8')) : { marks: [] };
+    const seg = segments.find((s) => s.id === id);
+    return { id, file, title: seg?.title ?? (id === 'title' ? 'Title' : 'End'), marks: meta.marks ?? [], trailer: seg?.trailer ?? [] };
+  });
+}
+
+/**
+ * The trailer's pieces: the first seconds of the title, each segment's highlights ([mark name,
+ * seconds] or [from, to]), the end card. `parts` need their durations.
+ */
+export function trailerPieces(parts) {
+  const pieces = [];
+  for (const p of parts) {
+    if (p.id === 'title') pieces.push({ part: p, key: 'title', from: 0, to: Math.min(3.6, p.duration) });
+    else if (p.id === 'end') pieces.push({ part: p, key: 'end', from: 0, to: p.duration });
+    else
+      for (const [a, b] of p.trailer) {
+        const m = typeof a === 'string' ? p.marks.find((x) => x.name === a) : null;
+        if (typeof a === 'string' && !m) continue;
+        const from = m ? m.t + 0.2 : a;
+        const to = m ? from + b : b;
+        if (from < p.duration) pieces.push({ part: p, key: `${p.id}/${m ? m.name : from}`, from, to: Math.min(to, p.duration - 0.3) });
+      }
+  }
+  return pieces;
+}
 
 export async function assemble(parts, { out, work }) {
   // ---- full video
@@ -32,6 +64,7 @@ export async function assemble(parts, { out, work }) {
   rmSync(tdir, { recursive: true, force: true });
   mkdirSync(tdir, { recursive: true });
   const pieces = [];
+  // each piece fades in and out from the background colour
   const cut = async (file, from, to, i) => {
     const f = join(tdir, `${String(i).padStart(3, '0')}.mp4`);
     const d = to - from;
@@ -40,19 +73,7 @@ export async function assemble(parts, { out, work }) {
     pieces.push(f);
   };
   let i = 0;
-  for (const p of parts) {
-    if (p.id === 'title') await cut(p.file, 0, Math.min(3.6, p.duration), i++);
-    else if (p.id === 'end') await cut(p.file, 0, p.duration, i++);
-    else
-      for (const [a, b] of p.trailer) {
-        // [mark name, seconds] or [from, to]
-        const m = typeof a === 'string' ? p.marks.find((x) => x.name === a) : null;
-        if (typeof a === 'string' && !m) continue;
-        const from = m ? m.t + 0.2 : a;
-        const to = m ? from + b : b;
-        if (from < p.duration) await cut(p.file, from, Math.min(to, p.duration - 0.3), i++);
-      }
-  }
+  for (const piece of trailerPieces(parts)) await cut(piece.part.file, piece.from, piece.to, i++);
   const tlist = join(tdir, 'list.ffconcat');
   writeFileSync(tlist, ['ffconcat version 1.0', ...pieces.map((f) => `file '${f}'`)].join('\n') + '\n');
   const trailer = join(out, 'slate-trailer.mp4');

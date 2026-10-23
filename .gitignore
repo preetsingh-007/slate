@@ -10,3 +10,4 @@ playwright-report
 public/pdfjs
 .wrangler
 worker/.dev.vars
+__pycache__
