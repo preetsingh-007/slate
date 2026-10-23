@@ -1,7 +1,12 @@
 /** Small helpers shared by the demo scripts. */
 import { spawn } from 'node:child_process';
 
-export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/**
+ * Pacing of the recording: every pause and hold is scaled by DEMO_PACE (default 0.75, a little
+ * brisker than the scripts' nominal timings; 1 = as written).
+ */
+export const PACE = Number(process.env.DEMO_PACE ?? 0.75);
+export const sleep = (ms) => new Promise((r) => setTimeout(r, ms * PACE));
 
 export const FFMPEG = process.env.FFMPEG ?? '/usr/bin/ffmpeg';
 

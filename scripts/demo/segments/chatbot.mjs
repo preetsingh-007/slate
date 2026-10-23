@@ -12,10 +12,7 @@ const K = 'W3 · Chatbot answers and web pages';
 export default {
   id: 'chatbot',
   title: 'Chatbot answers and web pages (W3)',
-  trailer: [
-    [3, 8],
-    [10.5, 15],
-  ],
+  trailer: [['New from clipboard', 4.5]],
   async run(env) {
     const s = await begin(env, 'chatbot');
     const { page, app, d, rec } = s;

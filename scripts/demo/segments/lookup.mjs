@@ -10,7 +10,7 @@ const K = 'W5 · Lookup and revision';
 export default {
   id: 'lookup',
   title: 'Lookup and revision (W5)',
-  trailer: [[4, 10]],
+  trailer: [['Gym reader', 4]],
   async run(env) {
     const s = await begin(env, 'lookup');
     const { page, app, d, rec } = s;

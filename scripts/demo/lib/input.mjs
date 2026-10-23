@@ -57,7 +57,7 @@ export class Director {
   /** Moves the mouse smoothly to (x, y). Each move waits for a frame, so steps follow the clock. */
   async glide(x, y, ms) {
     const d = Math.hypot(x - this.x, y - this.y);
-    const dur = ms ?? Math.min(650, 220 + d * 0.45);
+    const dur = ms ?? Math.min(520, 200 + d * 0.4);
     const x0 = this.x;
     const y0 = this.y;
     const t0 = Date.now();
@@ -160,6 +160,13 @@ export class Director {
     await sleep(after);
   }
 
+  /** Escape (clear the selection, close a menu) without leaving a focus ring on the canvas. */
+  async esc() {
+    await this.page.keyboard.press('Escape');
+    await this.page.evaluate(() => (document.activeElement?.classList.contains('cv-root') ? document.activeElement.blur() : undefined));
+    await sleep(300);
+  }
+
   async pen(type, x, y, force, buttons) {
     const s = await this.cdp();
     await s.send('Input.dispatchMouseEvent', { type, x, y, button: buttons ? 'left' : 'none', buttons, clickCount: 1, pointerType: 'pen', force });
@@ -170,10 +177,14 @@ export class Director {
    * Between strokes the pen hovers to the next start. `speed` is in pixels per millisecond.
    */
   async write(strokes, { speed = 0.9, gap = 40 } = {}) {
+    speed *= 1.25;
     const s = await this.cdp();
     // events are sent without waiting for each frame (the renderer keeps every point) and paced here
+    // events carry timestamps on an even clock, so the browser's stroke prediction sees a
+    // steady hand rather than the bursts in which they are sent
+    let clock = Date.now() / 1000;
     const send = (type, x, y, buttons, force) =>
-      s.send('Input.dispatchMouseEvent', { type, x, y, button: buttons || type === 'mouseReleased' ? 'left' : 'none', buttons, clickCount: 1, pointerType: 'pen', force }).catch(() => {});
+      s.send('Input.dispatchMouseEvent', { type, x, y, button: buttons || type === 'mouseReleased' ? 'left' : 'none', buttons, clickCount: 1, pointerType: 'pen', force, timestamp: clock }).catch(() => {});
     for (const st of strokes) {
       if (st.length < 2) continue;
       const pending = [];
@@ -181,17 +192,21 @@ export class Director {
       // hover to the start
       const d = Math.hypot(sx - this.x, sy - this.y);
       const n = Math.min(10, Math.max(2, Math.round(d / 30)));
+      clock = Math.max(clock, Date.now() / 1000);
       for (let i = 1; i <= n; i++) {
         const k = ease(i / n);
+        clock += 0.008;
         pending.push(send('mouseMoved', this.x + (sx - this.x) * k, this.y + (sy - this.y) * k, 0, 0));
         await sleep(Math.min(14, 4 + d / n / 3));
       }
       await sleep(gap * 0.5);
+      clock = Math.max(clock + 0.01, Date.now() / 1000);
       pending.push(send('mousePressed', sx, sy, 1, st[0][2] ?? 0.4));
       let px = sx;
       let py = sy;
       let budget = 0;
       for (const [x, y, p] of st.slice(1)) {
+        clock += Math.max(0.002, Math.hypot(x - px, y - py) / speed / 1000);
         pending.push(send('mouseMoved', x, y, 1, p ?? 0.6));
         budget += Math.hypot(x - px, y - py) / speed;
         px = x;
@@ -202,6 +217,7 @@ export class Director {
         }
       }
       const [ex, ey] = st[st.length - 1];
+      clock += 0.008;
       pending.push(send('mouseReleased', ex, ey, 0, 0));
       await Promise.all(pending);
       this.x = ex;

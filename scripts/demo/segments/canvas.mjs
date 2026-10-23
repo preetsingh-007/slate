@@ -13,11 +13,7 @@ const K = 'W1 · Lecture on the canvas';
 export default {
   id: 'canvas',
   title: 'Canvas (W1): a lecture',
-  trailer: [
-    [2.5, 9.5],
-    [27, 33],
-    [52, 57],
-  ],
+  trailer: [['Ink with pressure', 6], ['Photos with ink', 4], ['Beautify', 5]],
   async run(env) {
     const s = await begin(env, 'canvas');
     const { page, app, d, rec } = s;
@@ -83,7 +79,7 @@ export default {
     await d.type('Roots of $p(\\lambda) = \\det(A - \\lambda I)$\n');
     await d.type('- [ ] Exercise 5A.4\n- [ ] Read Axler 5B', { delay: 30 });
     await sleep(300);
-    await d.press('Escape');
+    await d.esc();
     await sleep(500);
     const box = page.locator('.cv-text').filter({ hasText: 'Lecture 7' }).first();
     await d.click(box.locator('input.md-task').first());
@@ -102,12 +98,12 @@ export default {
     // ---------------------------------------------------------------- the day line
     rec.mark('Day lines and topics');
     await d.caption({ kicker: K, title: 'Every day starts with a dated line', body: 'Its label stays pinned at the edge as you pan. The tag button files the day under gym topics.' });
-    await d.press('Escape');
+    await d.esc();
     await d.click(tool('Hand'));
     await d.drag([900, 560], [620, 560], { ms: 900 });
     await sleep(300);
     await d.drag([620, 560], [900, 560], { ms: 900 });
-    const tagBtn = page.getByRole('button', { name: /^Tag Thu 22 Oct 2026 with topics$/ });
+    const tagBtn = page.locator(`.cv-dayline[data-date="${new Date().toLocaleDateString('sv-SE')}"]`).getByRole('button', { name: /^Tag .* with topics$/ });
     await d.click(tagBtn);
     const dlg = page.getByRole('dialog');
     await dlg.waitFor();
@@ -122,7 +118,7 @@ export default {
 
     // ---------------------------------------------------------------- a photo with ink on it
     rec.mark('Photos with ink');
-    await d.press('Escape');
+    await d.esc();
     await d.hover([700, 600]);
     await d.wheel(0, 230, { ms: 700 });
     await d.caption({ kicker: K, title: 'Take a photo of the board and draw on it', body: '**Insert image → Take a photo.** Ink drawn over an image moves with it.' });
@@ -141,7 +137,7 @@ export default {
     ib = await img.boundingBox();
     await d.drag([ib.x + ib.width * 0.45, ib.y + ib.height * 0.5], [600 + ib.width * 0.45, 330 + ib.height * 0.5], { ms: 750 });
     ib = await img.boundingBox();
-    await d.press('Escape');
+    await d.esc();
     await d.click(tool('Pen'));
     await d.click(tools.getByRole('button', { name: 'Orange', exact: true }));
     await d.write(roughEllipse(ib.x + ib.width * 0.18, ib.y + ib.height * 0.72, ib.width * 0.13, ib.height * 0.08, { seed: 12 }), { speed: 1.1 });
@@ -151,7 +147,18 @@ export default {
     await d.click([ib.x + ib.width * 0.6, ib.y + ib.height * 0.3]);
     await d.drag([ib.x + ib.width * 0.6, ib.y + ib.height * 0.3], [ib.x + ib.width * 0.6 + 70, ib.y + ib.height * 0.3 + 10], { ms: 700 });
     await sleep(500);
-    await d.press('Escape');
+    await d.esc();
+
+    // ---------------------------------------------------------------- space
+    rec.mark('Insert space');
+    await d.caption({ kicker: K, title: 'Make room where you need it', body: 'The **space** tool pushes everything below the line down (or pulls it up), only where it is in the way.' });
+    await d.click(tool('Insert space'));
+    const ra = await client(rowAv);
+    const rd = await client(rowDet);
+    const split = (ra.y + ra.h + rd.y) / 2;
+    await d.drag([360, split], [360, split + 60], { ms: 1000 });
+    await d.click(tool('Lasso'));
+    await sleep(700);
 
     // ---------------------------------------------------------------- lasso and selection actions
     rec.mark('Lasso and selection');
@@ -182,7 +189,7 @@ export default {
     await sleep(700);
     await d.click(bar.getByRole('button', { name: /^Delete/ }));
     await sleep(400);
-    await d.press('Escape');
+    await d.esc();
 
     // ---------------------------------------------------------------- Beautify
     rec.mark('Beautify');
@@ -190,7 +197,7 @@ export default {
     await d.click(tool('Pen'));
     r = await client(rowDet);
     const ibox = await img.boundingBox();
-    await d.write(roughRect(r.x - 14, r.y - 8, r.w + 28, r.h + 16, { seed: 31, rough: 3 }), { speed: 1.3 });
+    await d.write(roughRect(r.x - 14, r.y - 8, r.w + 28, r.h + 16, { seed: 31, rough: 1.8 }), { speed: 1.3 });
     await d.write(roughArrow(r.x + r.w + 30, r.y + r.h * 0.6, ibox.x - 18, ibox.y + ibox.height * 0.68, { seed: 33, head: 18, bow: 0.12 }), { speed: 1.2 });
     await d.click(tool('Lasso'));
     // a rectangle lasso around the sketch (second click on the lasso switches to rectangle)
@@ -201,51 +208,45 @@ export default {
     await sleep(400);
     await d.click(bar.getByRole('button', { name: /^Beautify/ }));
     await sleep(1300);
-    await d.click(bar.getByRole('button', { name: 'Restore original ink' }));
-    await sleep(1000);
-    await d.click(bar.getByRole('button', { name: /^Beautify/ }));
-    await sleep(900);
-    await d.press('Escape');
+    const restore = bar.getByRole('button', { name: 'Restore original ink' });
+    if (await restore.isVisible().catch(() => false)) {
+      await d.click(restore);
+      await sleep(1000);
+      await d.click(bar.getByRole('button', { name: /^Beautify/ }));
+      await sleep(900);
+    } else console.log('  (Beautify made no shape)');
+    await d.esc();
     await d.click(page.getByRole('radio', { name: 'Free-form' }));
-
-    // ---------------------------------------------------------------- space
-    rec.mark('Insert space');
-    await d.caption({ kicker: K, title: 'Make room where you need it', body: 'The **space** tool pushes everything below the line down (or pulls it up), only where it is in the way.' });
-    await d.click(tool('Insert space'));
-    r = await client(rowAv);
-    const split = r.y + r.h + 22;
-    await d.drag([360, split], [360, split + 90], { ms: 1000 });
-    await sleep(700);
 
     // ---------------------------------------------------------------- navigation
     rec.mark('Pan, zoom, minimap and dates');
     await d.caption({ kicker: K, title: 'Pan and zoom; the minimap and dates take you back', body: 'Pinch or ⌘-scroll to zoom. **Go to a date** lists every day; **Home** jumps back to now.' });
     await d.click(tool('Pen'));
     await d.hover([700, 450]);
-    await d.wheel(0, 500, { ctrl: true, ms: 900 });
-    await sleep(300);
-    await d.wheel(0, -700, { ms: 1000 });
-    await sleep(400);
-    const mm = page.getByRole('img', { name: /Overview of the canvas/ });
-    const mb = await mm.boundingBox();
-    await d.click([mb.x + mb.width * 0.5, mb.y + mb.height * 0.12]);
+    await d.wheel(0, 70, { ctrl: true, ms: 700 });
     await sleep(900);
+    await d.hover(page.getByRole('img', { name: /Overview of the canvas/ }), 500);
+    await sleep(500);
     await d.click(tools.getByRole('button', { name: 'Go to a date' }));
-    await sleep(400);
+    await sleep(500);
     await d.click(page.getByRole('list', { name: 'Days on this canvas' }).getByRole('button', { name: /Tue 20 Oct/ }));
-    await sleep(1100);
-    await d.press('Home', ['Home'], 900);
-    await page.keyboard.press('Control+0');
-    await sleep(600);
+    await sleep(1400);
+    await d.press('Home', ['Home'], 1200);
+    // back to the lecture at 100 % for the last step
+    await rec.cut(async () => {
+      await app.canvas((h, y) => h.engine.setCamera({ x: -10, y, zoom: 1 }, false), rowAv[0].y - 170);
+      await sleep(300);
+    });
 
     // ---------------------------------------------------------------- undo / redo
     rec.mark('Undo and redo');
     await d.caption({ kicker: K, title: 'Undo and redo everything', body: '⌘Z and ⇧⌘Z, the toolbar arrows, or a two-finger tap.' });
-    await page.locator('.cv-root').first().focus();
-    await d.press('Control+z', ['⌘', 'Z'], 900);
-    await d.press('Control+z', ['⌘', 'Z'], 900);
-    await d.press('Control+Shift+z', ['⇧', '⌘', 'Z'], 900);
-    await d.press('Control+Shift+z', ['⇧', '⌘', 'Z'], 900);
+    const undo = tools.getByRole('button', { name: /^Undo/ });
+    const redo = tools.getByRole('button', { name: /^Redo/ });
+    for (const [btn, keys] of [[undo, ['⌘', 'Z']], [undo, ['⌘', 'Z']], [redo, ['⇧', '⌘', 'Z']], [redo, ['⇧', '⌘', 'Z']]]) {
+      await d.keys(keys, 900);
+      await d.click(btn, { after: 700 });
+    }
     await page.evaluate(() => document.activeElement?.blur());
     await sleep(500);
 

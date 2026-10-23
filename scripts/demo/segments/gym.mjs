@@ -13,7 +13,7 @@ const K = 'W4 · Marking for gym';
 export default {
   id: 'gym',
   title: 'Marking for gym (W4)',
-  trailer: [[3, 12]],
+  trailer: [['Mark for gym', 6]],
   async run(env) {
     const s = await begin(env, 'gym');
     const { page, app, d, rec } = s;
@@ -55,7 +55,7 @@ export default {
     await sleep(300);
     await d.click(dlg.getByRole('button', { name: 'Mark', exact: true }));
     await sleep(600);
-    await d.press('Escape');
+    await d.esc();
     await sleep(1000);
 
     // ---------------------------------------------------------------- formalized

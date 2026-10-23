@@ -36,7 +36,7 @@ window.setInfo = (t, b) => {
 export default {
   id: 'phone',
   title: 'iPhone-width layout',
-  trailer: [[1, 7]],
+  trailer: [['iPhone width', 4.5]],
   async run(env) {
     env.api.html['/demo/phone.html'] = host(env.appUrl);
     const ctx = await env.browser.newContext({ viewport: { width: 1440, height: 810 }, deviceScaleFactor: 4 / 3, baseURL: env.appUrl });

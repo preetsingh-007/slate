@@ -18,10 +18,7 @@ async function pageRect(page, n, x, y, w, h) {
 export default {
   id: 'paper',
   title: 'Reading a paper (W2)',
-  trailer: [
-    [4, 9],
-    [27, 34],
-  ],
+  trailer: [['Lasso a figure onto the canvas', 6]],
   async run(env) {
     const s = await begin(env, 'paper');
     const { page, app, d, rec } = s;

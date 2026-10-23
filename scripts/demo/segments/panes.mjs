@@ -11,7 +11,7 @@ const K = 'Panes, sync and offline';
 export default {
   id: 'panes',
   title: 'Panes, EPUB, sync, dark theme, offline',
-  trailer: [[2.5, 8]],
+  trailer: [['Tabs, divider, sides, full screen', 4]],
   async run(env) {
     const s = await begin(env, 'panes');
     const { page, app, d, rec, ctx } = s;

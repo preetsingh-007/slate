@@ -6,6 +6,10 @@
  * how the app behaves. Controlled from the recorder through window.__demo.
  */
 (() => {
+  // Synthetic pen input arrives in bursts, and the browser's stroke prediction then overshoots
+  // by up to ~100 px for a frame; real Pencil input does not. The recording leaves prediction
+  // out (in every frame, so also inside the phone frame).
+  if (typeof PointerEvent !== 'undefined' && PointerEvent.prototype.getPredictedEvents) PointerEvent.prototype.getPredictedEvents = () => [];
   if (window.top !== window || window.__demo) return;
   const css = `
     :host { all: initial; }

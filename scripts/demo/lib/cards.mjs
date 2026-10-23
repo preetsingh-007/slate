@@ -57,7 +57,7 @@ export async function recordCard(env, html, out, seconds) {
   const rec = new Recorder(page, join(env.work, 'frames', out.replace(/\W+/g, '_')));
   await rec.start();
   await page.setContent(html);
-  await sleep(seconds * 1000);
+  await new Promise((r) => setTimeout(r, seconds * 1000));
   await rec.stop();
   await rec.encode(out);
   await ctx.close();

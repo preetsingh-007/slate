@@ -43,16 +43,25 @@ export async function assemble(parts, { out, work }) {
   for (const p of parts) {
     if (p.id === 'title') await cut(p.file, 0, Math.min(3.6, p.duration), i++);
     else if (p.id === 'end') await cut(p.file, 0, p.duration, i++);
-    else for (const [a, b] of p.trailer) if (a < p.duration) await cut(p.file, a, Math.min(b, p.duration), i++);
+    else
+      for (const [a, b] of p.trailer) {
+        // [mark name, seconds] or [from, to]
+        const m = typeof a === 'string' ? p.marks.find((x) => x.name === a) : null;
+        if (typeof a === 'string' && !m) continue;
+        const from = m ? m.t + 0.2 : a;
+        const to = m ? from + b : b;
+        if (from < p.duration) await cut(p.file, from, Math.min(to, p.duration - 0.3), i++);
+      }
   }
   const tlist = join(tdir, 'list.ffconcat');
   writeFileSync(tlist, ['ffconcat version 1.0', ...pieces.map((f) => `file '${f}'`)].join('\n') + '\n');
   const trailer = join(out, 'slate-trailer.mp4');
   await ffmpeg(['-f', 'concat', '-safe', '0', '-i', tlist, '-c', 'copy', '-movflags', '+faststart', trailer]);
 
-  // ---- poster: a busy moment of the canvas segment with the side pane open
-  const posterPart = parts.find((p) => p.id === 'chatbot') ?? parts[1];
-  const posterAt = posterPart.start + Math.min(posterPart.duration - 1, posterPart.poster ?? posterPart.duration * 0.55);
+  // ---- poster: the paper beside the lecture, just after the clip's badge brought the figure back
+  const posterPart = parts.find((p) => p.id === 'paper') ?? parts[1];
+  const back = posterPart.marks.find((m) => m.name === 'Source badge back to the page');
+  const posterAt = posterPart.start + (back ? posterPart.duration - 1.5 : posterPart.duration * 0.6);
   await ffmpeg(['-ss', posterAt.toFixed(2), '-i', full, '-frames:v', '1', join(out, 'poster.png')]);
 
   const size = (f) => `${(statSync(f).size / 1e6).toFixed(1)} MB`;
