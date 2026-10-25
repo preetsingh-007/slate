@@ -487,7 +487,7 @@ export function PdfViewer({ book, onMissing }: { book: BookMeta; onMissing(): vo
     const needle = q.trim().toLowerCase();
     const out: { page: number; snippet: string }[] = [];
     setResults([]);
-    const indexed = await new LibraryTextIndex(services.db).get(book.id);
+    const indexed = await LibraryTextIndex.for(services.db).get(book.id);
     const pages: AsyncIterable<{ page: number; text: string }> | Iterable<{ page: number; text: string }> =
       indexed?.pages && indexed.source === book.fileHash ? indexed.pages.map((text, i) => ({ page: i + 1, text })) : iteratePageTexts(pdf);
     for await (const { page: p, text } of pages) {

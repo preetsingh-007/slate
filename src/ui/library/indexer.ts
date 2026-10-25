@@ -14,7 +14,7 @@ const idle = () =>
   );
 
 export function startIndexer(services: Services): () => void {
-  const index = new LibraryTextIndex(services.db);
+  const index = LibraryTextIndex.for(services.db);
   const ctl = new AbortController();
   let running = false;
   let again = false;

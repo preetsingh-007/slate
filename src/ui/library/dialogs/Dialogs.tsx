@@ -202,7 +202,7 @@ export function DeleteDialog({ itemKind, id }: { itemKind: 'book' | 'clipping'; 
   }, [services.canvases, id]);
   if (!item) return null;
   const remove = async () => {
-    await deleteLibraryItem({ library: services.library, index: new LibraryTextIndex(services.db), settings: services.settings }, itemKind, id);
+    await deleteLibraryItem({ library: services.library, index: LibraryTextIndex.for(services.db), settings: services.settings }, itemKind, id);
     const app = useApp.getState();
     const i = app.tabs.findIndex((t) => (t.kind === 'book' || t.kind === 'clipping') && t.id === id);
     if (i >= 0) app.closeTab(i);
