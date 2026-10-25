@@ -107,6 +107,15 @@ describe('local full-text search (L12)', () => {
     expect(await idx.has('b', 'h1')).toBe(true);
     expect(await idx.has('b', 'other')).toBe(false);
   });
+
+  it('L12: a search made before a book is indexed finds it once the indexer has added it', async () => {
+    const s = await services();
+    const pane = LibraryTextIndex.for(s.db);
+    const items = [{ id: 'b', title: 'Animals of Australia' }];
+    expect(await pane.search('quokka', items)).toEqual([]);
+    await LibraryTextIndex.for(s.db).put({ id: 'b', pages: ['The quokka smiles.'], source: 'h1' });
+    expect((await pane.search('quokka', items)).map((h) => h.id)).toEqual(['b']);
+  });
 });
 
 describe('delete warnings (L13) and clip marks (S7)', () => {

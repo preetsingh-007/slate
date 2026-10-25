@@ -29,7 +29,7 @@ export function LibraryPane() {
   const [drag, setDrag] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const [missing, setMissing] = useState<Set<string>>(new Set());
-  const index = useMemo(() => new LibraryTextIndex(services.db), [services.db]);
+  const index = useMemo(() => LibraryTextIndex.for(services.db), [services.db]);
 
   // which book files are not on this device (L6)
   useEffect(() => {

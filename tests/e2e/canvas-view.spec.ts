@@ -100,7 +100,9 @@ test.describe('space, navigation and time (C1, C2, C5, C20, C21)', () => {
     await seed(page, [{ kind: 'stroke', pts: strokePts(0, 100, 300, 200) }]);
     const mm = page.getByRole('img', { name: /Overview of the canvas/ });
     await expect(mm).toBeVisible();
-    await page.waitForTimeout(600);
+    // the minimap redraws up to 1.4 s after a change (debounce, then idle time); September's
+    // marker shows once the overview reaches up to it
+    await expect(page.getByRole('button', { name: /Jump to .* Sep 2026/ })).toBeVisible();
     const box = await mm.boundingBox();
     await page.mouse.click(box!.x + 10, box!.y + 4);
     await frames(page);

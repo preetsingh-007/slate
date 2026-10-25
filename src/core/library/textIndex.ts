@@ -50,10 +50,22 @@ export function queryWords(q: string): string[] {
     .filter((w) => w.length > 0);
 }
 
+const shared = new WeakMap<SlateDB, LibraryTextIndex>();
+
 export class LibraryTextIndex {
   private cache = new LRU<string, IndexedText | null>(24);
 
   constructor(private db: SlateDB) {}
+
+  /**
+   * The database's one index in this tab. Every user shares it, so the search sees what the
+   * background indexer adds: a separate instance would keep its cached "not indexed yet".
+   */
+  static for(db: SlateDB): LibraryTextIndex {
+    let index = shared.get(db);
+    if (!index) shared.set(db, (index = new LibraryTextIndex(db)));
+    return index;
+  }
 
   async get(id: string): Promise<IndexedText | null> {
     const hit = this.cache.get(id);
