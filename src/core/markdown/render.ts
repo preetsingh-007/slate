@@ -143,7 +143,12 @@ const HEADING_ID = 'data-slate-heading-id';
 /** An absolute or protocol-relative web URL (another site). */
 const isRemote = (url: string) => /^\s*(https?:)?\/\//i.test(url);
 
-let purifyReady = false;
+/**
+ * The renderer's own DOMPurify instance: its hook (no images from other sites) must not apply
+ * to the other users of DOMPurify, such as htmlToMarkdown, which maps a saved page's remote
+ * images to the clipping's local assets (L8).
+ */
+let purifier: ReturnType<typeof DOMPurify> | null = null;
 /**
  * DOMPurify with its DOM-clobbering protection on: `id` and `name` attributes that would shadow
  * document or form properties (`<img name="querySelector">`) are removed. Heading anchors are
@@ -151,8 +156,9 @@ let purifyReady = false;
  * iframe, img and object elements are exposed on `document`).
  */
 function purify(html: string): string {
-  if (!purifyReady) {
-    DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  if (!purifier) {
+    purifier = DOMPurify(window);
+    purifier.addHook('afterSanitizeAttributes', (node) => {
       if (node.tagName === 'A' && node.getAttribute('target') === '_blank') node.setAttribute('rel', 'noopener noreferrer');
       const id = node.getAttribute?.(HEADING_ID);
       if (id != null) {
@@ -171,9 +177,8 @@ function purify(html: string): string {
       const style = node.getAttribute('style');
       if (style && /url\(\s*['"]?\s*(https?:)?\/\//i.test(style)) node.setAttribute('style', style.replace(/url\(\s*['"]?\s*(https?:)?\/\/[^)]*\)/gi, 'none'));
     });
-    purifyReady = true;
   }
-  return DOMPurify.sanitize(html, {
+  return purifier.sanitize(html, {
     ADD_ATTR: ['target', 'data-remote-src', 'data-i', 'data-task', 'data-rel', 'data-rel-src', 'data-anchor', 'aria-hidden', 'encoding'],
     ADD_TAGS: ['semantics', 'annotation'],
   });

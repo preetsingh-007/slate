@@ -31,6 +31,12 @@ export function CapturePreview() {
   const ref = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ x: number; y: number; dx: number; dy: number } | null>(null);
   const [busy, setBusy] = useState(false);
+  // S3: the card's real height keeps it (and Send to canvas) on screen; a tall capture can
+  // make it up to 420 px high
+  const [height, setHeight] = useState(260);
+  useLayoutEffect(() => {
+    if (ref.current && ref.current.offsetHeight !== height) setHeight(ref.current.offsetHeight);
+  });
 
   // keyboard: Escape dismisses
   useEffect(() => {
@@ -92,7 +98,7 @@ export function CapturePreview() {
 
   const w = 300;
   const left = drag ? drag.x - drag.dx : Math.max(8, Math.min(window.innerWidth - w - 8, at.x));
-  const top = drag ? drag.y - drag.dy : Math.max(56, Math.min(window.innerHeight - 260, at.y));
+  const top = drag ? drag.y - drag.dy : Math.max(56, Math.min(window.innerHeight - height - 8, at.y));
 
   return createPortal(
     <div

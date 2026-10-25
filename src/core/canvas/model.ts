@@ -14,7 +14,7 @@
 import * as Y from 'yjs';
 import type { CanvasObject, Mark, Rect } from '../model/types';
 import { Emitter } from '../util/emitter';
-import { isoMonth } from '../util/time';
+import { isoDate, isoMonth } from '../util/time';
 import { compareZ, keyAfter, keyBefore } from '../util/zindex';
 import { objectBounds, unionRect } from './bounds';
 import {
@@ -27,6 +27,7 @@ import {
   daysMap,
   marksMap,
   normalizeDays,
+  pruneDays,
   objectsMap,
   patchObjectMap,
   readMark,
@@ -235,6 +236,7 @@ export class CanvasModel {
     for (const id of objects.keys()) this.refreshObject(month, objects, id, change);
     this.refreshMarks(month, marks);
     normalizeDays(doc);
+    pruneDays(doc);
     this.emit(change);
     this.applyQueued(seg);
   }
@@ -481,6 +483,7 @@ export class CanvasModel {
     };
     fn(tx);
     if (!ops.length) return;
+    this.dropEmptyDays(ops);
 
     const byMonth = new Map<string, Op[]>();
     const route = (month: string | undefined, op: Op) => {
@@ -550,6 +553,33 @@ export class CanvasModel {
       }
     }
     if (waiting.length) this.queueChanged(new Set(waiting.map((q) => q.month)));
+  }
+
+  /**
+   * C19: when an action removes the last objects of a day, its line goes in the same step, so
+   * undo brings both back. Only days whose month is loaded with nothing waiting are checked:
+   * elsewhere not every object of the day is known.
+   */
+  private dropEmptyDays(ops: Op[]) {
+    const removed = new Set<string>();
+    for (const op of ops) if (op.t === 'remove') removed.add(op.id);
+    if (!removed.size) return;
+    const lines = this.dayLines();
+    const dates = new Set<string>();
+    for (const id of removed) {
+      const o = this.objs.get(id);
+      const date = o && isoDate(o.created);
+      if (date && lines.has(date) && this.segs.has(date.slice(0, 7)) && !this.queued.has(date.slice(0, 7))) dates.add(date);
+    }
+    for (const op of ops) {
+      if (op.t === 'add') dates.delete(isoDate(op.obj.created));
+      else if (op.t === 'day' || op.t === 'unday') dates.delete(op.date);
+    }
+    for (const o of this.objs.values()) {
+      if (!dates.size) return;
+      if (!removed.has(o.id)) dates.delete(isoDate(o.created));
+    }
+    for (const date of dates) ops.push({ t: 'unday', date });
   }
 
   /** W1: shows the queues of `months` and makes sure those months load. */

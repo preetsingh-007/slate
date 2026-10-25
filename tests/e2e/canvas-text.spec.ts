@@ -10,6 +10,8 @@ test.describe('text boxes and to-dos (C7)', () => {
     const ta = page.getByRole('textbox', { name: /Text box/ });
     await expect(ta).toBeFocused();
     await ta.pressSequentially('# Lecture 4');
+    // C7: while the new box is edited, only the editor shows it (no rendered copy underneath)
+    await expect(page.locator('.cv-text:not(.editing)')).toHaveCount(0);
     await ta.press('Enter');
     await ta.pressSequentially('- [ ] read $\\lambda$ section');
     await ta.press('Enter');

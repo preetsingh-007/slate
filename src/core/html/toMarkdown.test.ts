@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { htmlToMarkdown, htmlToText, mathmlToTex, nodeToMarkdown } from './toMarkdown';
+import { renderMarkdown } from '../markdown/render';
 
 /** KaTeX output as it appears in ChatGPT and Claude answers (MathML + annotation + HTML). */
 const katex = (tex: string, display = false) => {
@@ -70,6 +71,14 @@ describe('HTML to Markdown for pages (L8, S2)', () => {
       image: (u) => (u === 'https://example.org/notes/img/fig%201.png' ? 'assets/abc.png' : null),
     });
     expect(md).toBe('[rank](https://example.org/wiki/Rank) [here](https://example.org/notes/page.html#sec)\n\n![Figure 1](assets/abc.png)');
+  });
+
+  it('keeps remote images to map after Markdown was rendered (the renderer’s own sanitiser, L8)', () => {
+    // rendering Markdown installs a hook that strips remote images from rendered views; it
+    // must not reach the HTML of a saved page
+    renderMarkdown('![x](https://example.org/x.png)');
+    const md = htmlToMarkdown('<p><img src="https://example.org/fig.png" alt="Figure"></p>', { baseUrl: 'https://example.org/', image: (u) => (u === 'https://example.org/fig.png' ? 'assets/f.png' : null) });
+    expect(md).toBe('![Figure](assets/f.png)');
   });
 
   it('drops relative links without a base so clipping.md has only absolute links', () => {

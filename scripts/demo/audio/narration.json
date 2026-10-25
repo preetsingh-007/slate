@@ -1,0 +1,104 @@
+{
+  "$comment": [
+    "Voice-over for the demo (npm run demo:audio). Lines are keyed to the recorded parts (title, segments/<id>, end).",
+    "at: seconds into that part's clip where the line starts (just after its caption appears); see segments/<id>.json for the marks.",
+    "text: what is shown in narration.srt/txt; say: what the voice reads, if different. The lexicon respells words for the voice everywhere (a value in /slashes/ is Kokoro phonemes).",
+    "When a line is longer than its step, build.mjs holds the step's last frame (at holdAt, default: 0.5 s before the next line) instead of rushing."
+  ],
+  "voice": "af_heart",
+  "speed": 1.0,
+  "gap": 0.35,
+  "mix": { "musicLufs": -28, "duckDb": -8, "duckAttack": 0.3, "duckRelease": 0.8, "targetLufs": -16, "peak": -2 },
+  "lexicon": {
+    "preetsingh-007.github.io/slate": "preet singh, zero zero seven, dot [github](/ɡˈɪthˌʌb/) dot eye oh, slash slate",
+    "GitHub": "/ɡˈɪthˌʌb/",
+    "LaTeX": "/lˈAtɛk/",
+    "minimap": "/mˈɪnimˌæp/",
+    "EPUB": "/ˈipˌʌb/",
+    "To-dos": "/tˈudˌuz/",
+    "to-do": "/tˈudˌu/"
+  },
+  "parts": {
+    "title": [
+      { "at": 0.4, "step": "Title", "text": "Slate is an infinite canvas for your study work. Write by hand, read papers beside your notes, and keep it all in your gym repository on GitHub." }
+    ],
+    "live": [
+      { "at": 0.4, "step": "The live app", "text": "It runs right in the browser, and installs on your iPad. We'll set it up at the end." }
+    ],
+    "canvas": [
+      { "at": 0.3, "step": "Ink with pressure", "text": "Part one: the canvas. Write with the Pencil, with real pressure." },
+      { "at": 5.1, "step": "Colours and sizes", "text": "Pick a colour and a size, or save them as a preset." },
+      { "at": 9.9, "step": "Highlighter", "text": "The highlighter stays behind your writing." },
+      { "at": 13.1, "step": "Eraser", "text": "Erase whole strokes, or cut through part of one." },
+      { "at": 17.3, "step": "Text, maths and to-dos", "text": "Text boxes understand Markdown and LaTeX maths, and a to-do is one tap to tick." },
+      { "at": 24.7, "step": "Day lines and topics", "text": "Every day starts with a dated line. Its label stays pinned as you pan, and the tag button files the day under your gym topics, like eigenvalues." },
+      { "at": 37.6, "step": "Photos with ink", "text": "Take a photo of the board, right onto the canvas. Resize it, place it, and draw on it. When you move the photo, the ink moves with it." },
+      { "at": 51.1, "step": "Insert space", "text": "Need room? The space tool pushes everything below it down." },
+      { "at": 55.2, "step": "Lasso and selection", "text": "Lasso anything: ink, text or images. Then move it, scale it, recolour it, or duplicate it." },
+      { "at": 64.1, "step": "Beautify", "text": "Sketch a rough box and an arrow, and Beautify turns them into clean shapes. Restore brings your own ink back, any time." },
+      { "at": 75.0, "step": "Pan, zoom, minimap and dates", "text": "Pinch to zoom. The minimap and the list of dates take you back to any day, and Home brings you back to today." },
+      { "at": 84.2, "step": "Undo and redo", "text": "And everything can be undone, and redone." }
+    ],
+    "paper": [
+      { "at": 0.3, "step": "Import a PDF", "text": "Part two: reading a paper. Import a PDF, and it opens beside the canvas." },
+      { "at": 5.9, "step": "Highlight, ink and notes", "text": "Highlight a passage, circle something with the pen, or add a margin note. The PDF itself never changes." },
+      { "at": 15.9, "step": "Lasso a figure onto the canvas", "text": "Lasso a figure and send it to the canvas. It arrives as a clip, with its text, and a link back to the page." },
+      { "at": 25.3, "step": "Source badge back to the page", "text": "Tap the clip's badge, and the paper opens right at that spot, even offline.", "holdAt": 30.6 }
+    ],
+    "chatbot": [
+      { "at": 0.3, "step": "New from clipboard", "text": "Part three: chatbot answers. Copy an answer, and paste it in, maths and all." },
+      { "at": 5.3, "step": "Lasso part of it onto the canvas", "text": "Lasso the part you need, and drag it onto the canvas. It links back to the answer." },
+      { "at": 12.5, "step": "New from link: Reader and Original", "text": "New from link saves a web article, through your own small fetch helper, as a clean reader view." },
+      { "at": 20.1, "step": "Original", "text": "The original page is kept too, and it opens offline.", "holdAt": 22.2 }
+    ],
+    "gym": [
+      { "at": 0.3, "step": "Mark for gym", "text": "Part four: marking for gym. Lasso some worked notes, and mark them for gym, as a note, a problem, a solution or a question, with a topic and a comment." },
+      { "at": 13.7, "step": "Formalized: the badge opens gym", "text": "An agent in your gym repository formalizes the mark, and the flag becomes a badge that opens the gym file.", "holdAt": 18.6 }
+    ],
+    "lookup": [
+      { "at": 0.3, "step": "Gym reader", "text": "Part five: lookup and revision. Browse your whole gym repository, topics, notes and problems, rendered with maths, even offline." },
+      { "at": 11.5, "step": "Search gym", "text": "Search all of gym; results open right at their section." },
+      { "at": 17.0, "step": "Revision list", "text": "The revision list shows what to revisit next." },
+      { "at": 21.1, "step": "To-dos", "text": "To-dos collects your checklist, and every to-do on your canvases. Tap one to jump to it.", "holdAt": 27.7 }
+    ],
+    "panes": [
+      { "at": 0.3, "step": "Tabs, divider, sides, full screen", "text": "Part six: panes. Books, clippings and gym files open as tabs beside the canvas. Drag the divider, swap sides, or go full screen." },
+      { "at": 14.4, "step": "A second canvas", "text": "A second canvas can sit right beside the first." },
+      { "at": 18.4, "step": "EPUB books", "text": "EPUB books work too, with a table of contents, maths and highlights." },
+      { "at": 24.6, "step": "Sync status", "text": "Changes save on the device first, and sync to gym." },
+      { "at": 27.6, "step": "Dark theme", "text": "Light or dark, as you like." },
+      { "at": 30.7, "step": "Works offline", "text": "And it works offline. Changes wait, and sync when you're back.", "holdAt": 34.4 }
+    ],
+    "phone": [
+      { "at": 0.3, "step": "iPhone width", "text": "On a phone, the canvas and the side pane take turns. The layers button switches between them." },
+      { "at": 6.8, "step": "Carry tray", "text": "Lasso something in the side pane, and it waits in the carry tray. Switch to the canvas, and drag it to where it belongs.", "holdAt": 16.4 }
+    ],
+    "setup": [
+      { "at": 0.3, "step": "Install on the iPad", "text": "Part seven: setting up. Open Slate in Safari, tap Share, then Add to Home Screen.", "holdAt": 7.0 },
+      { "at": 7.6, "step": "First run: the token", "text": "On first run, Slate shows you how to make a fine-grained GitHub token, for your gym repository only." },
+      { "at": 15.4, "step": "Repository and branch", "text": "Enter the repository, the branch, and the token." },
+      { "at": 19.9, "step": "Verify and connect", "text": "Slate checks the token, then syncs for the first time." },
+      { "at": 23.8, "step": "Optional: the fetch helper", "text": "Optionally, deploy the free fetch helper, and add it in Settings to save web pages." },
+      { "at": 30.4, "step": "Ready", "text": "And you're ready.", "holdAt": 31.6 }
+    ],
+    "end": [
+      { "at": 0.3, "step": "End", "text": "Slate is at preetsingh-007.github.io/slate. Open it in Safari, add it to your Home Screen, and start writing.", "holdAt": 4.6 }
+    ]
+  },
+  "trailer": {
+    "$comment": "One line per trailer piece (title, each segment's trailer highlights by mark name, end); at: seconds into the piece.",
+    "lines": [
+      { "piece": "title", "at": 0.3, "text": "Meet Slate: an infinite canvas for study." },
+      { "piece": "canvas/Ink with pressure", "at": 0.2, "text": "Write with the Pencil, with real pressure." },
+      { "piece": "canvas/Photos with ink", "at": 0.1, "text": "Every day starts with its own dated line." },
+      { "piece": "canvas/Beautify", "at": 0.1, "text": "Turn rough sketches into clean shapes." },
+      { "piece": "paper/Lasso a figure onto the canvas", "at": 0.2, "text": "Lasso a figure from a paper, straight onto the canvas." },
+      { "piece": "chatbot/New from clipboard", "at": 0.1, "text": "Paste a chatbot's answer, maths and all." },
+      { "piece": "gym/Mark for gym", "at": 0.2, "text": "Mark your work, and an agent files it in your gym repository." },
+      { "piece": "lookup/Gym reader", "at": 0.1, "text": "Browse your notes, even offline." },
+      { "piece": "panes/Tabs, divider, sides, full screen", "at": 0.1, "text": "Papers, books and notes, side by side." },
+      { "piece": "phone/iPhone width", "at": 0.1, "text": "And it works on your phone, too." },
+      { "piece": "end", "at": 0.3, "text": "Slate. Free, on GitHub Pages. Add it to your Home Screen today." }
+    ]
+  }
+}
