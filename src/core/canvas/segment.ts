@@ -12,7 +12,7 @@
  */
 import * as Y from 'yjs';
 import type { CanvasObject, Mark, ObjectKind } from '../model/types';
-import { parseDate } from '../util/time';
+import { isoDate, parseDate } from '../util/time';
 
 export const LOCAL = 'local';
 /** Origin for derived layout writes (measured text heights): not part of undo. */
@@ -145,22 +145,27 @@ const ZONE_SLACK = 12 * 3600_000;
 /**
  * C19: removes the lines of days that have no objects left. Deleting a day's last object
  * removes its line (model.ts); this clears lines left behind before that, or by an older app.
- * An object counts for a day when it was made within 12 hours of it, so a line is kept when
- * its objects were made on a device in another time zone.
+ * An object counts for the day it was made on here. When that day has no line, it counts for
+ * the lines within 12 hours of it instead: it may have been made on a device in another time
+ * zone, where its day was the line's.
  */
 export function pruneDays(doc: Y.Doc, origin: unknown = LAYOUT) {
   const days = daysMap(doc);
   if (!days.size) return;
-  const created: number[] = [];
+  const dates = new Set([...days.keys()].map((key) => key.split('@')[0]));
+  const spans = [...dates].map((date) => {
+    const start = parseDate(date).getTime();
+    return { date, from: start - ZONE_SLACK, to: start + 86_400_000 + ZONE_SLACK };
+  });
+  const used = new Set<string>();
   for (const m of objectsMap(doc).values()) {
     const c = m.get('created');
-    if (typeof c === 'number') created.push(c);
+    if (typeof c !== 'number') continue;
+    const date = isoDate(c);
+    if (dates.has(date)) used.add(date);
+    else for (const s of spans) if (c >= s.from && c < s.to) used.add(s.date);
   }
-  const drop = [...days.keys()].filter((key) => {
-    const start = parseDate(key.split('@')[0]).getTime();
-    const end = start + 86_400_000;
-    return !created.some((c) => c >= start - ZONE_SLACK && c < end + ZONE_SLACK);
-  });
+  const drop = [...days.keys()].filter((key) => !used.has(key.split('@')[0]));
   if (!drop.length) return;
   doc.transact(() => {
     for (const key of drop) days.delete(key);

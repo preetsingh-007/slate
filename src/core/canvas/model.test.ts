@@ -176,7 +176,8 @@ describe('CanvasModel', () => {
   it('C19: lines of days with no objects left are cleared when the month opens', async () => {
     const src = memorySource();
     const doc = await src.open('2026-10');
-    const OCT23 = new Date(2026, 9, 23, 15, 51).getTime();
+    // within 12 hours of the 22nd, but the 23rd has its own line: it counts for the 23rd only
+    const OCT23 = new Date(2026, 9, 23, 11, 21).getTime();
     doc.transact(() => {
       doc.getMap('days').set('2026-10-22@d2', 65.2);
       doc.getMap('days').set('2026-10-23@d3', 59.7);
