@@ -4,7 +4,8 @@
  * When an object created on a calendar day (device local time) lies below all existing content
  * and that day has no line on this canvas yet, the day's line is created 24 units above it.
  * Objects added that day elsewhere create no line. At most one line per date per canvas; when
- * two devices create one, the model keeps the lower (see segment.ts).
+ * two devices create one, the model keeps the lower (see segment.ts). Deleting a day's last
+ * object removes its line in the same undo step (model.ts).
  */
 import type { Rect } from '../model/types';
 

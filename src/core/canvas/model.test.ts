@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import type { StrokeObject, TextObject } from '../model/types';
 import { CanvasModel } from './model';
+import { createObjectMap } from './segment';
 
 function memorySource() {
   const docs = new Map<string, Y.Doc>();
@@ -129,6 +130,66 @@ describe('CanvasModel', () => {
     expect(mb.dayLines().get('2026-10-21')).toBe(300);
     await Promise.resolve();
     expect(b.docs.get('2026-10')!.getMap('days').size).toBe(1);
+  });
+
+  it("C19: deleting a day's last object removes its line in the same undo step", async () => {
+    const m = new CanvasModel('main', memorySource(), 'd1', () => OCT);
+    await m.load(['2026-10']);
+    m.transact((tx) => {
+      tx.add(stroke('a', OCT, 0, 100));
+      tx.add(stroke('b', OCT, 0, 200));
+      tx.setDay('2026-10-21', 76);
+    });
+    m.transact((tx) => tx.remove('a'));
+    expect(m.dayLines().get('2026-10-21')).toBe(76);
+    // erasing part of a stroke replaces it with pieces of the same day: the line stays
+    m.transact((tx) => {
+      tx.remove('b');
+      tx.add({ ...stroke('b2', OCT, 0, 200) });
+    });
+    expect(m.dayLines().get('2026-10-21')).toBe(76);
+    m.transact((tx) => tx.remove('b2'));
+    expect(m.dayLines().has('2026-10-21')).toBe(false);
+    m.undo();
+    expect(m.has('b2')).toBe(true);
+    expect(m.dayLines().get('2026-10-21')).toBe(76);
+    m.redo();
+    expect(m.dayLines().has('2026-10-21')).toBe(false);
+  });
+
+  it("C19: deleting another day's objects leaves today's line alone", async () => {
+    const m = new CanvasModel('main', memorySource(), 'd1', () => OCT);
+    await m.load(['2026-10']);
+    const OCT20 = OCT - 86_400_000;
+    m.transact((tx) => {
+      tx.add(stroke('old', OCT20, 0, 0));
+      tx.setDay('2026-10-20', -24);
+    });
+    m.transact((tx) => {
+      tx.add(stroke('new', OCT, 0, 100));
+      tx.setDay('2026-10-21', 76);
+    });
+    m.transact((tx) => tx.remove('old'));
+    expect([...m.dayLines().keys()]).toEqual(['2026-10-21']);
+  });
+
+  it('C19: lines of days with no objects left are cleared when the month opens', async () => {
+    const src = memorySource();
+    const doc = await src.open('2026-10');
+    const OCT23 = new Date(2026, 9, 23, 15, 51).getTime();
+    doc.transact(() => {
+      doc.getMap('days').set('2026-10-22@d2', 65.2);
+      doc.getMap('days').set('2026-10-23@d3', 59.7);
+      // made late on the 20th on a device in another time zone: the 21st's line stays
+      doc.getMap('days').set('2026-10-21@d4', 0);
+      doc.getMap('objects').set('t', createObjectMap({ ...stroke('t', OCT23, 0, 75) }));
+      doc.getMap('objects').set('z', createObjectMap({ ...stroke('z', new Date(2026, 9, 20, 22).getTime(), 0, -100) }));
+    });
+    const m = new CanvasModel('main', src, 'd1', () => OCT23);
+    await m.load(['2026-10']);
+    expect([...m.dayLines().keys()].sort()).toEqual(['2026-10-21', '2026-10-23']);
+    // the clean-up is not an undo step
+    expect(m.canUndo()).toBe(false);
   });
 
   it('typing in a text box is undoable on its own', async () => {

@@ -16,7 +16,7 @@ In Safari, open the address above, then **Share → Add to Home Screen**. Slate 
 
 ## The five workflows
 
-**W1. Lecture.** Write on the canvas with the Pencil. The first thing you add on a new day, below everything else, draws a dashed line labelled with the date; the tag button on that label tags the day with gym topics. Take a photo of the board with **Insert image → Take a photo** and draw on it (ink drawn over an image moves with it). Add to-dos on the **To-dos** page (top bar), or type `- [ ] …` in a text box on the canvas.
+**W1. Lecture.** Write on the canvas with the Pencil. The first thing you add on a new day, below everything else, draws a dashed line labelled with the date (deleting everything from that day removes it); the tag button on that label tags the day with gym topics. Take a photo of the board with **Insert image → Take a photo** and draw on it (ink drawn over an image moves with it). Add to-dos on the **To-dos** page (top bar), or type `- [ ] …` in a text box on the canvas.
 
 **W2. Reading a paper.** **Library → Import** (or drop a PDF or EPUB anywhere). The book opens in the side pane. Highlight selected text, write on the page with the pen, or add a margin note. Choose **Lasso**, draw around a figure or paragraph, and **Send to canvas** (or drag the preview onto the canvas). The clip's badge opens the book at that place, flashed for 2 seconds. **Export a copy with annotations** saves a PDF with them drawn in; the book file itself never changes.
 
