@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import type { StrokeObject, TextObject } from '../model/types';
 import { CanvasModel } from './model';
-import { createObjectMap } from './segment';
+import { makeMark } from './marks';
+import { createMarkMap, createObjectMap } from './segment';
 
 function memorySource() {
   const docs = new Map<string, Y.Doc>();
@@ -190,6 +191,47 @@ describe('CanvasModel', () => {
     await m.load(['2026-10']);
     expect([...m.dayLines().keys()].sort()).toEqual(['2026-10-21', '2026-10-23']);
     // the clean-up is not an undo step
+    expect(m.canUndo()).toBe(false);
+  });
+
+  it('G3: a mark follows its objects when they move or go, in the same undo step', async () => {
+    const m = new CanvasModel('main', memorySource(), 'd1', () => OCT);
+    await m.load(['2026-10']);
+    m.transact((tx) => {
+      tx.add(stroke('a', OCT, 0, 0));
+      tx.add(stroke('b', OCT, 100, 0));
+      tx.add(stroke('other', OCT, 500, 500));
+    });
+    const mark = makeMark('m1', [m.get('a')!, m.get('b')!], { kind: 'note', topic: '', problem: '', comment: 'hi' }, OCT)!;
+    m.transact((tx) => tx.setMark(mark));
+    expect(m.mark('m1')!.region).toEqual({ x: -9, y: -9, w: 128, h: 28 });
+    // moving one marked object widens the region; an unmarked one leaves it alone
+    m.transact((tx) => tx.update('b', { x: 300, y: 200 }));
+    expect(m.mark('m1')!.region).toEqual({ x: -9, y: -9, w: 328, h: 228 });
+    m.transact((tx) => tx.update('other', { x: 900 }));
+    expect(m.mark('m1')!.region).toEqual({ x: -9, y: -9, w: 328, h: 228 });
+    m.undo();
+    m.undo();
+    expect(m.mark('m1')!.region).toEqual({ x: -9, y: -9, w: 128, h: 28 });
+    // deleting one marked object shrinks it to the rest; the other fields stay
+    m.transact((tx) => tx.remove('a'));
+    expect(m.mark('m1')).toMatchObject({ region: { x: 91, y: -9, w: 28, h: 28 }, comment: 'hi', objects: ['a', 'b'] });
+  });
+
+  it('G3: a mark left behind by objects moved before is put back around them when the month opens', async () => {
+    const src = memorySource();
+    const doc = await src.open('2026-10');
+    const mark = makeMark('m1', [stroke('a', OCT, 0, 0)], { kind: 'note', topic: '', problem: '', comment: '' }, OCT)!;
+    doc.transact(() => {
+      doc.getMap('objects').set('a', createObjectMap(stroke('a', OCT, 400, 300)));
+      doc.getMap('marks').set('m1', createMarkMap(mark));
+      // a mark whose second object is not here (another month, or deleted): left alone
+      doc.getMap('marks').set('m2', createMarkMap({ ...mark, id: 'm2', objects: ['a', 'gone'] }));
+    });
+    const m = new CanvasModel('main', src, 'd1', () => OCT);
+    await m.load(['2026-10']);
+    expect(m.mark('m1')!.region).toEqual({ x: 391, y: 291, w: 28, h: 28 });
+    expect(m.mark('m2')!.region).toEqual(mark.region);
     expect(m.canUndo()).toBe(false);
   });
 

@@ -17,6 +17,7 @@ import { Emitter } from '../util/emitter';
 import { isoDate, isoMonth } from '../util/time';
 import { compareZ, keyAfter, keyBefore } from '../util/zindex';
 import { objectBounds, unionRect } from './bounds';
+import { markRegion } from './marks';
 import {
   LAYOUT,
   LOCAL,
@@ -78,6 +79,7 @@ type Op =
   | { t: 'remove'; id: string }
   | { t: 'mark'; mark: Mark }
   | { t: 'unmark'; id: string }
+  | { t: 'markRegion'; id: string; region: Rect }
   | { t: 'day'; date: string; y: number }
   | { t: 'unday'; date: string }
   | { t: 'dayTopics'; date: string; topics: string[] };
@@ -239,6 +241,7 @@ export class CanvasModel {
     pruneDays(doc);
     this.emit(change);
     this.applyQueued(seg);
+    this.fitMarks();
   }
 
   /** W1: applies the actions that waited for this month, each as part of its own undo step. */
@@ -318,6 +321,11 @@ export class CanvasModel {
           case 'unmark':
             this.markCache.delete(op.id);
             break;
+          case 'markRegion': {
+            const m = this.markCache.get(op.id);
+            if (m) this.markCache.set(op.id, { mark: { ...m.mark, region: op.region }, month });
+            break;
+          }
           case 'day':
             this.queuedDays.set(op.date, op.y);
             break;
@@ -484,6 +492,7 @@ export class CanvasModel {
     fn(tx);
     if (!ops.length) return;
     this.dropEmptyDays(ops);
+    this.followMarks(ops);
 
     const byMonth = new Map<string, Op[]>();
     const route = (month: string | undefined, op: Op) => {
@@ -505,6 +514,7 @@ export class CanvasModel {
           route(this.markCache.get(op.mark.id)?.month ?? isoMonth(op.mark.created), op);
           break;
         case 'unmark':
+        case 'markRegion':
           route(this.markCache.get(op.id)?.month, op);
           break;
         default:
@@ -553,6 +563,63 @@ export class CanvasModel {
       }
     }
     if (waiting.length) this.queueChanged(new Set(waiting.map((q) => q.month)));
+  }
+
+  /**
+   * G3: sets the region of marks whose objects were moved before regions followed them (or by
+   * an older app). Only marks with every object loaded: a partial set would shrink the region.
+   * Not an undo step.
+   */
+  private fitMarks() {
+    for (const { mark, month } of this.markCache.values()) {
+      const seg = this.segs.get(month);
+      if (!seg || this.queued.has(month) || !mark.objects.length || !mark.objects.every((id) => this.objs.has(id))) continue;
+      const region = markRegion(mark.objects.map((id) => this.objs.get(id)!));
+      const r = mark.region;
+      if (!region || (region.x === r.x && region.y === r.y && region.w === r.w && region.h === r.h)) continue;
+      seg.doc.transact(() => marksMap(seg.doc).get(mark.id)?.set('region', region), LAYOUT);
+    }
+  }
+
+  /**
+   * G3: a mark's region follows its objects. When an action moves, resizes or removes marked
+   * objects, the region is set around them again in the same step, so the flag, and the
+   * region's picture written to the repository, stay on what was marked. Objects of the mark
+   * that are not loaded (or were deleted earlier) are left out; with none left, the region stays.
+   */
+  private followMarks(ops: Op[]) {
+    if (!this.markCache.size) return;
+    const after = new Map<string, CanvasObject | null>();
+    const marksSet = new Set<string>();
+    for (const op of ops) {
+      if (op.t === 'add') after.set(op.obj.id, op.obj);
+      else if (op.t === 'remove') after.set(op.id, null);
+      else if (op.t === 'update') {
+        const o = after.has(op.id) ? after.get(op.id) : this.objs.get(op.id);
+        if (!o) continue;
+        const next = { ...o } as Record<string, unknown>;
+        for (const [k, v] of Object.entries(op.patch)) {
+          if (k === 'id' || k === 'kind') continue;
+          if (v === undefined) delete next[k];
+          else next[k] = v;
+        }
+        after.set(op.id, next as unknown as CanvasObject);
+      } else if (op.t === 'mark') marksSet.add(op.mark.id);
+      else if (op.t === 'unmark' || op.t === 'markRegion') marksSet.add(op.id);
+    }
+    if (!after.size) return;
+    for (const { mark } of this.markCache.values()) {
+      if (marksSet.has(mark.id) || !mark.objects.some((id) => after.has(id))) continue;
+      const objects: CanvasObject[] = [];
+      for (const id of mark.objects) {
+        const o = after.has(id) ? after.get(id) : this.objs.get(id);
+        if (o) objects.push(o);
+      }
+      const region = markRegion(objects);
+      const r = mark.region;
+      if (!region || (region.x === r.x && region.y === r.y && region.w === r.w && region.h === r.h)) continue;
+      ops.push({ t: 'markRegion', id: mark.id, region });
+    }
   }
 
   /**
@@ -622,6 +689,10 @@ export class CanvasModel {
           break;
         case 'unmark':
           marks.delete(op.id);
+          break;
+        case 'markRegion':
+          // only the region: a concurrent edit of the mark's other fields elsewhere stays
+          marks.get(op.id)?.set('region', op.region);
           break;
         case 'day': {
           const days = daysMap(doc);
