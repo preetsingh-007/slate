@@ -296,7 +296,7 @@ export class CanvasEngine {
   jumpToNow(animate = true) {
     // where new work goes: just below the latest content (today's line or its preview)
     const bottom = this.ctl.contentBottom();
-    const y = previewLineY(bottom);
+    const y = previewLineY(bottom, this.base);
     // left edge: the left of the latest content (the bottom 600 units of it), or the origin
     let left = 0;
     const recent = bottom === null ? [] : this.ctl.model.query({ x: -1e9, y: bottom - 600, w: 2e9, h: 600 });
