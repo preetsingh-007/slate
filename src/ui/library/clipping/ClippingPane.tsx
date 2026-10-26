@@ -138,8 +138,15 @@ function ClippingView({ meta, content }: { meta: ClippingMeta; content: Clipping
   // ---------------------------------------------------------------- Original view
   const frame = useRef<FrameController | null>(null);
   const [frameText, setFrameText] = useState<string | null>(null);
-  // a (re)loaded frame has no text until it says so: jumps and anchors wait for it
-  useEffect(() => setFrameText(null), [shownView, meta.scripts]);
+  // a (re)loaded frame has no text until it says so: jumps and anchors wait for it. Cleared
+  // while rendering, not in an effect: an effect would let a jump run first with the previous
+  // frame's text and post its flash to a frame that is not listening yet
+  const frameKey = `${shownView}|${!!meta.scripts}`;
+  const [shownFrameKey, setShownFrameKey] = useState(frameKey);
+  if (shownFrameKey !== frameKey) {
+    setShownFrameKey(frameKey);
+    setFrameText(null);
+  }
   const prepared = useMemo(() => (content.snapshotHtml ? prepareSnapshotHtml(content.snapshotHtml, !!meta.scripts) : ''), [content.snapshotHtml, meta.scripts]);
   const [frameAssets, setFrameAssets] = useState<Record<string, Blob> | null>(null);
   useEffect(() => {
