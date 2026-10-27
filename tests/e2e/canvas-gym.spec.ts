@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { objects, openCanvas, seed, strokePts, withCanvas } from './canvas-helpers';
+import { dragClient, objects, openCanvas, seed, strokePts, toClient, withCanvas } from './canvas-helpers';
 
 type Mark = { id: string; kind: string; topic: string; problem: string; comment: string; objects: string[] };
 const marks = (page: Page) => withCanvas<Mark[]>(page, '(h) => h.ctl.model.marks()');
@@ -7,6 +7,36 @@ const formalize = (page: Page, text: string) =>
   page.evaluate((t) => (window as unknown as { __slate: { formalized: { setFromText(t: string): Promise<void> } } }).__slate.formalized.setFromText(t), text);
 
 test.describe('gym hand-off on the canvas (G2, G3, G6, W4)', () => {
+  test('G3: a mark and its flag move with the marked text box', async ({ page }) => {
+    await openCanvas(page);
+    const [id] = await seed(page, [{ kind: 'text', x: 0, y: 100, w: 300, content: 'Order types' }]);
+    await withCanvas(page, `(h) => h.engine.select(['${id}'])`);
+    await page.getByRole('toolbar', { name: 'Selection' }).getByRole('button', { name: 'Mark for gym' }).click();
+    await page.getByRole('dialog', { name: 'Mark for gym' }).getByRole('button', { name: 'Mark' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    const [m] = await marks(page);
+    const bar = page.locator(`[data-mark="${m.id}"]`);
+    const box = page.locator(`[data-id="${id}"]`).first();
+    const gap = async () => (await bar.boundingBox())!.x - (await box.boundingBox())!.x;
+    const before = await gap();
+    // drag the box 200 px right and 120 px down
+    await page.getByRole('radio', { name: /^Lasso/ }).click();
+    await withCanvas(page, `(h) => h.engine.select(['${id}'])`);
+    const from = await toClient(page, 40, 110);
+    await dragClient(page, from, [from[0] + 200, from[1] + 120]);
+    await expect.poll(async () => (await objects(page))[0].x).toBeGreaterThan(100);
+    // the bar stays at the box's left edge, the region in the data moved with it
+    await expect.poll(gap).toBeCloseTo(before, 0);
+    const o = (await objects(page))[0];
+    const region = await withCanvas<{ x: number; y: number }>(page, `(h) => h.ctl.model.mark('${m.id}').region`);
+    expect(region.x).toBeCloseTo(o.x - 8, 0);
+    expect(region.y).toBeCloseTo(o.y - 8, 0);
+    // undo puts both back
+    await page.keyboard.press('ControlOrMeta+z');
+    await expect.poll(async () => (await objects(page))[0].x).toBe(0);
+    await expect.poll(gap).toBeCloseTo(before, 0);
+  });
+
   test('mark for gym: create, flag, edit, formalized badge opens the gym file, dismissed', async ({ page }) => {
     await openCanvas(page);
     const ids = await seed(page, [

@@ -160,6 +160,9 @@ export function CanvasView({ slug, embedded = false }: { slug: string; embedded?
   const [minimap, setMinimapState] = useState(services.settings.getPrefs().minimap);
   const armed = useRef<Pt | null>(null);
   const caret = useRef<HTMLDivElement>(null);
+  // read by placeCaret, which the engine's listeners keep from the first render
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
   const tool = useTools((s) => s.tool);
 
   const actions: ActionCtx | null = useMemo(() => (engine ? { engine, ctl, services, slug } : null), [engine, ctl, services, slug]);
@@ -216,7 +219,7 @@ export function CanvasView({ slug, embedded = false }: { slug: string; embedded?
     if (!el || !engine) return;
     const p = armed.current;
     const t = useTools.getState().tool;
-    if (!p || editing || (t !== 'lasso' && t !== 'hand' && t !== 'text')) {
+    if (!p || editingRef.current || (t !== 'lasso' && t !== 'hand' && t !== 'text')) {
       el.style.display = 'none';
       return;
     }
@@ -224,6 +227,14 @@ export function CanvasView({ slug, embedded = false }: { slug: string; embedded?
     el.style.display = '';
     el.style.transform = `translate(${(p.x - engine.camera.x) * k}px, ${(p.y - engine.camera.y) * k - 10}px)`;
   };
+
+  // editing a text box replaces the caret of a tap on empty canvas: one caret on screen, and
+  // none coming back at the old tap once editing ends
+  useEffect(() => {
+    if (editing) armed.current = null;
+    placeCaret();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing]);
 
   // the canvas API other areas call (S3, S6, G4)
   useEffect(() => {

@@ -224,16 +224,21 @@ export function PdfViewer({ book, onMissing }: { book: BookMeta; onMissing(): vo
     return () => clearTimeout(t);
   }, [flash]);
 
-  // keep zoom anchored on the current page
+  // keep the current page in place when the pages change size: zoom, or the reader's width
+  // (a drawer opened or closed, the divider moved), which makes fit-width pages taller or
+  // shorter, so the same scroll offset would land on another page
   const posRef = useRef<{ n: number; intra: number }>({ n: 1, intra: 0 });
-  const prevZoom = useRef(zoom);
+  const scale = fitWidth * zoom;
+  const prevScale = useRef<number | null>(null);
   useLayoutEffect(() => {
     const el = scroll.current;
-    if (!el || prevZoom.current === zoom) return;
-    prevZoom.current = zoom;
+    const prev = prevScale.current;
+    // until the book is laid out and its position restored there is no page to keep
+    prevScale.current = pdf && width ? scale : null;
+    if (!el || prev === null || prev === scale || !pdf || !width) return;
     const { n, intra } = posRef.current;
     if (offsetsRef.current[n] !== undefined) el.scrollTop = offsetsRef.current[n] + intra * cssHeightFor(n);
-  }, [zoom, cssHeightFor]);
+  }, [scale, pdf, width, cssHeightFor]);
 
   // back from a hidden tab: return to the page and offset that were on screen
   const pendingRestore = useRef<((el: HTMLElement) => void) | null>(null);

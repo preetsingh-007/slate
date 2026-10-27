@@ -88,6 +88,22 @@ test.describe('space, navigation and time (C1, C2, C5, C20, C21)', () => {
     if (d.getDate() > 1) await expect(page.getByTestId('dayline-preview').locator('.cv-date')).toBeVisible();
   });
 
+  test('C20: on an iPhone-width screen today’s date label clears the latest content', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openCanvas(page);
+    const d = new Date();
+    test.skip(d.getDate() === 1, 'yesterday is in another month');
+    await seed(page, [{ kind: 'stroke', pts: strokePts(0, 0, 900, 300), created: d.getTime() - 86_400_000 }]);
+    await page.keyboard.press('Home');
+    const label = page.getByTestId('dayline-preview').locator('.cv-dayline-label');
+    await expect(label).toBeVisible();
+    await page.waitForTimeout(400);
+    // the stroke's bottom edge, on screen
+    const [, bottom] = await toClient(page, 0, 300);
+    const box = await label.boundingBox();
+    expect(box!.y).toBeGreaterThan(bottom);
+  });
+
   test('the minimap shows the view and jumps where tapped; the date picker jumps to a day (C5, C21)', async ({ page }) => {
     await openCanvas(page);
     // a day line from last month, in its own segment

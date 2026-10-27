@@ -26,9 +26,13 @@ export function DayLines() {
   }, []);
   const lines = useMemo(() => {
     const m = ctl.model.dayLines();
-    const out = [...m].map(([date, y]) => ({ date, y, preview: false }));
+    const out = [...m].map(([date, y]) => ({ date, y, preview: false, bottom: null as number | null }));
     // C20: on a day with no line yet, today's line shows where new work starts
-    if (!m.has(today)) out.push({ date: today, y: previewLineY(ctl.contentBottom()), preview: true });
+    // (placed below `bottom` by the screen's scale, see previewLineY; it is always the lowest)
+    if (!m.has(today)) {
+      const bottom = ctl.contentBottom();
+      out.push({ date: today, y: bottom ?? 0, preview: true, bottom });
+    }
     return out.sort((a, b) => a.y - b.y);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctl, version, today]);
@@ -40,7 +44,8 @@ export function DayLines() {
     for (const l of lines) {
       const el = refs.current.get(l.date + (l.preview ? ':p' : ''));
       if (!el) continue;
-      const top = (l.y - cam.y) * k;
+      const y = l.preview ? previewLineY(l.bottom, engine.base) : l.y;
+      const top = (y - cam.y) * k;
       const on = top > -40 && top < engine.height + 4;
       el.style.display = on ? '' : 'none';
       if (on) el.style.transform = `translateY(${top}px)`;

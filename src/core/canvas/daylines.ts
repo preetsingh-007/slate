@@ -11,8 +11,10 @@ import type { Rect } from '../model/types';
 
 /** Distance between a day line and the first object below it (C19). */
 export const DAY_LINE_OFFSET = 24;
-/** Where the preview of today's line sits below the latest content (C20). */
+/** Where the preview of today's line sits below the latest content, at least (C20). */
 export const PREVIEW_GAP = 64;
+/** Screen room a date label takes above its line (32 px tall, 4 px up), with a margin. */
+export const LABEL_CLEARANCE_PX = 44;
 
 /** Lowest point of content, from loaded objects and the recorded bounds of unloaded months. */
 export function contentBottom(loaded: Rect | null, recorded: Iterable<Rect | null>): number | null {
@@ -32,9 +34,16 @@ export function dayLineFor(date: string, top: number, bottom: number | null, lin
   return Math.round((top - DAY_LINE_OFFSET) * 10) / 10;
 }
 
-/** y of today's preview line: just below the latest content, or at the origin of an empty canvas. */
-export function previewLineY(bottom: number | null): number {
-  return bottom === null ? 0 : Math.round(bottom + PREVIEW_GAP);
+/**
+ * y of today's preview line: just below the latest content, or at the origin of an empty
+ * canvas. `pxPerUnit` is the screen's scale at 100%: the date label is sized in screen pixels
+ * and sits above the line, so on a phone (a third of a pixel per unit) the gap grows to keep
+ * the label, and the line made 24 units above the first object written under it, clear of the
+ * content above.
+ */
+export function previewLineY(bottom: number | null, pxPerUnit = 1): number {
+  if (bottom === null) return 0;
+  return Math.round(bottom + Math.max(PREVIEW_GAP, DAY_LINE_OFFSET + LABEL_CLEARANCE_PX / pxPerUnit));
 }
 
 /** Day lines sorted top to bottom. */

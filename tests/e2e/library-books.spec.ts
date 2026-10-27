@@ -418,6 +418,27 @@ test('L2 NFR: an 800-page PDF shows its first page in under 2 s and stays light 
   await expect(page.getByTestId('pdf-page')).toHaveText(/^5\d \/ 800$/);
 });
 
+test('L2: closing the contents drawer after a jump keeps the page (the pages grow wider)', async ({ page }) => {
+  await openApp(page);
+  await importFile(page, 'book.pdf', await makeBookPdf(200), 'application/pdf');
+  await expect(page.locator('.pdfv-page[data-page="1"] canvas.ready')).toBeVisible();
+  await page.getByRole('button', { name: 'Table of contents' }).click();
+  await page.getByRole('navigation', { name: 'Contents' }).getByRole('button', { name: /^Chapter 3\b/ }).click();
+  await expect(page.getByTestId('pdf-page')).not.toHaveText(/^1 \//);
+  await page.waitForTimeout(300);
+  const at = await page.getByTestId('pdf-page').textContent();
+  const width = await page.locator('.pdfv-page').first().evaluate((el) => el.getBoundingClientRect().width);
+  await page.getByRole('button', { name: 'Table of contents' }).click();
+  await expect(page.locator('.viewer-drawer')).toHaveCount(0);
+  await expect.poll(() => page.locator('.pdfv-page').first().evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(width + 100);
+  await page.waitForTimeout(300);
+  await expect(page.getByTestId('pdf-page')).toHaveText(at!);
+  // and back: opening a drawer narrows the pages without moving away from the page either
+  await page.getByRole('button', { name: 'Search in book' }).click();
+  await page.waitForTimeout(300);
+  await expect(page.getByTestId('pdf-page')).toHaveText(at!);
+});
+
 test('L2 P1: switching side-pane tabs keeps the reading place', async ({ page }) => {
   await openApp(page);
   await importFile(page, 'book.pdf', await makeBookPdf(40), 'application/pdf');

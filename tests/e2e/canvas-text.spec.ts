@@ -74,6 +74,34 @@ test.describe('text boxes and to-dos (C7)', () => {
     expect(objs.map((o) => o.content).sort()).toEqual(['quick note', 'second']);
   });
 
+  test('editing a text box after tapping an empty spot shows one blinking caret, not two', async ({ page }) => {
+    await openCanvas(page);
+    const [id] = await seed(page, [{ kind: 'text', x: 0, y: 100, w: 300, content: 'existing notes' }]);
+    await page.getByRole('radio', { name: /^Lasso/ }).click();
+    const b = await surface(page);
+    // display, not visibility: the caret blinks by turning invisible half the time
+    const caret = page.locator('.cv-caret');
+    const shown = () => caret.evaluate((el) => getComputedStyle(el).display !== 'none');
+    // a tap on an empty spot shows where typing will start
+    await page.mouse.click(b.x + 400, b.y + 500);
+    await expect.poll(shown).toBe(true);
+    // opening a box with the text tool: only the box's caret
+    await page.getByRole('radio', { name: /^Text/ }).click();
+    const [x, y] = await toClient(page, 20, 110);
+    await page.mouse.click(x, y);
+    await expect(page.getByRole('textbox', { name: /Text box/ })).toBeFocused();
+    expect(await shown()).toBe(false);
+    // panning redraws every frame: the canvas caret stays away
+    await withCanvas(page, '(h) => h.engine.setCamera({ ...h.engine.camera, y: h.engine.camera.y + 30 })');
+    await page.waitForTimeout(100);
+    expect(await shown()).toBe(false);
+    // and does not come back at the old tap when editing ends
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+    expect(await shown()).toBe(false);
+    expect((await objects(page)).find((o) => o.id === id)?.content).toBe('existing notes');
+  });
+
   test('the width is draggable', async ({ page }) => {
     await openCanvas(page);
     const [id] = await seed(page, [{ kind: 'text', x: 0, y: 100, w: 300, content: 'a fairly long line of text that wraps when the box is narrow' }]);

@@ -169,6 +169,15 @@ describe('day lines (C19, C20, C21)', () => {
     expect(previewLineY(550)).toBeGreaterThan(550);
   });
 
+  it("C20: today's preview leaves room for its date label above it, also on a phone", () => {
+    expect(previewLineY(500, 1.2)).toBe(500 + 64); // desktop
+    // iPhone at 100%: 342 px for 1000 units; the label (44 px) needs 129 units, plus the 24
+    // between a new line and the first object under it
+    const phone = 342 / 1000;
+    expect(previewLineY(500, phone)).toBe(Math.round(500 + 24 + 44 / phone));
+    expect(previewLineY(null, phone)).toBe(0);
+  });
+
   it('jumps to a day, or the closest earlier day', () => {
     const all = new Map([
       ['2026-10-01', 0],
