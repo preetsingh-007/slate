@@ -82,6 +82,8 @@ export function ConnectForm({ onConnected, submitLabel = 'Verify and connect', a
     try {
       const r = await sync.connect({ token: token.trim(), repo: repo.trim(), branch: branch.trim() || 'main', folder: folder.trim() });
       setResult(r);
+      // R4: gym is in a folder of this repository; fill it in so the next attempt connects there
+      if (r.suggestedFolder) setFolder(r.suggestedFolder);
       if (r.ok) {
         setToken('');
         // connected once: first-run onboarding never shows again, even after disconnecting

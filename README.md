@@ -6,7 +6,7 @@ An infinite canvas for study work, with a library of books and clippings beside 
 
 1. Open `https://preetsingh-007.github.io/slate/`.
 2. Slate asks for your gym repository (`owner/name`), the branch (`main`), the folder that holds gym when it is part of a larger repository (for example `gym` in a monorepo; leave it empty otherwise) and a GitHub token, and shows how to make the token. In short: on github.com go to **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**; choose **Only select repositories** and pick only your gym repository; set **Contents** to **Read and write** (Metadata becomes read-only by itself); leave everything else at **No access**. Copy the token (`github_pat_…`) into Slate and choose **Verify and connect**.
-3. Slate checks that the token can write to the repository and syncs for the first time. The token stays on this device; Slate warns 14 days before it expires and asks for a new one if GitHub rejects it, keeping every change meanwhile.
+3. Slate checks that the token can write to the repository (and, when the folder is empty but the repository keeps gym in a folder, asks you to set it) and syncs for the first time. The token stays on this device; Slate warns 14 days before it expires and asks for a new one if GitHub rejects it, keeping every change meanwhile.
 
 **Continue offline without sync** skips this; connect later from **Settings → GitHub**.
 

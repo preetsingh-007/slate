@@ -64,6 +64,36 @@ test('onboarding verifies the token and connects (R4)', async ({ page, request }
   expect(secrets.tokenExpiry).toBe(Date.UTC(2026, 10, 1));
 });
 
+test('connecting to a repository that keeps gym in a folder asks for the folder (R4, R5)', async ({ page, request }) => {
+  const repo = `me/ws-${Date.now().toString(36)}-${n++}`;
+  const files = {
+    'README.md': '# workspace\n',
+    'gym/README.md': '# gym\n',
+    'gym/journal/README.md': '# Journal\n',
+    'gym/library/README.md': '# Library\n',
+    'slides/README.md': '# slides\n',
+  };
+  expect((await request.post(`${GITHUB}/__setup`, { data: { repo, tokens: ['good-token'], files } })).ok()).toBe(true);
+  await page.goto('/?onboarding=1');
+  const dialog = page.getByRole('dialog', { name: 'Welcome to Slate' });
+  await useMockApi(page);
+  await dialog.getByLabel('Repository (owner/name)').fill(repo);
+  await dialog.getByLabel('Fine-grained personal access token').fill('good-token');
+  await dialog.getByRole('button', { name: 'Verify and connect' }).click();
+  // refused, with the folder filled in
+  await expect(dialog.getByRole('alert')).toContainText('keeps gym in the folder "gym"');
+  await expect(dialog.getByLabel(/^Folder/)).toHaveValue('gym');
+  expect(Object.keys(await repoFiles(request, repo)).some((p) => p.startsWith('journal/') || p.startsWith('library/'))).toBe(false);
+  // the second attempt connects to the folder and writes only inside it
+  await dialog.getByRole('button', { name: 'Verify and connect' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByTestId('sync-status')).toHaveAttribute('data-phase', 'synced');
+  await expect.poll(async () => Object.keys(await repoFiles(request, repo)).filter((p) => p.startsWith('gym/library/')).length).toBeGreaterThan(1);
+  const after = Object.keys(await repoFiles(request, repo));
+  expect(after.filter((p) => p.startsWith('journal/') || p.startsWith('library/'))).toEqual([]);
+  expect(after).toContain('gym/library/settings.json');
+});
+
 test('continuing offline skips sync (R4, R10)', async ({ page }) => {
   await page.goto('/?onboarding=1');
   await page.getByRole('button', { name: 'Continue offline without sync' }).click();

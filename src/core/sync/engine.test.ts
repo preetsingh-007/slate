@@ -18,7 +18,7 @@ import { AssetStore } from '../storage/assets';
 import { CanvasStore } from '../stores/canvases';
 import { LibraryStore } from '../stores/library';
 import { FormalizedStore } from '../stores/formalized';
-import { DEFAULT_TIMINGS, SYNC_RUN_ALLOWANCE_MS, SyncEngine, worstCaseSyncDelayMs } from './engine';
+import { DEFAULT_TIMINGS, SYNC_RUN_ALLOWANCE_MS, SyncEngine, gymFolderOf, worstCaseSyncDelayMs } from './engine';
 import { parseFrontMatter } from './derived/frontmatter';
 import { asSyncWrite } from '../stores/sharedKv';
 import { saveReadingPosition } from '../library/positions';
@@ -364,6 +364,32 @@ describe('authentication (R4)', () => {
     expect(b.mirror.list().some((e) => e.path.startsWith('slides/') || e.path.startsWith('gym/'))).toBe(false);
     await b.sync.sync();
     expect(text(repo.files().get('gym/journal/queue.md'))).not.toContain('m1');
+  });
+
+  it('finds where gym lives in a repository from Slate\'s own folders (R4)', () => {
+    expect(gymFolderOf(['README.md', 'math/README.md'])).toBeNull(); // a new gym repository
+    expect(gymFolderOf(['README.md', 'journal/README.md', 'library/README.md'])).toBeNull(); // gym is the repository
+    expect(gymFolderOf(['README.md', 'gym/README.md', 'gym/journal/README.md', 'slides/README.md'])).toBe('gym');
+    expect(gymFolderOf(['areas/gym/library/README.md'])).toBe('areas/gym');
+    expect(gymFolderOf(['b/journal/README.md', 'a/journal/README.md', 'x/y/library/README.md'])).toBe('a');
+    // a folder merely named like Slate's is not gym
+    expect(gymFolderOf(['slides/library/notes.md', 'docs/journal/2026.md'])).toBeNull();
+  });
+
+  it('refuses to connect without a folder to a repository that keeps gym in one (R4, R5)', async () => {
+    const gh = new FakeGitHub();
+    const repo = await gh.createRepo('me/ws', { tokens: ['tok'], files: { 'README.md': '# workspace\n', 'gym/README.md': '# gym\n', 'gym/journal/README.md': '# Journal\n', 'gym/library/README.md': '# Library\n' } });
+    const a = await device(gh, 'a', { connect: false });
+    devices.push(a);
+    const r = await a.sync.connect({ token: 'tok', repo: 'me/ws', branch: 'main' });
+    expect(r).toMatchObject({ ok: false, branchExists: true, suggestedFolder: 'gym', error: expect.stringMatching(/keeps gym in the folder "gym"/) });
+    expect(a.settings.getSecrets().token).toBeUndefined();
+    expect(a.sync.configured()).toBe(false);
+    expect(repo.log()).toEqual(['Initial commit']);
+    expect(await a.sync.connect({ token: 'tok', repo: 'me/ws', branch: 'main', folder: 'gym' })).toMatchObject({ ok: true, folderExists: true });
+    // a gym repository with Slate's data at the root still connects without a folder
+    await gh.createRepo('me/gym2', { tokens: ['tok'], files: { 'README.md': '# gym\n', 'journal/README.md': '# Journal\n' } });
+    expect(await a.sync.verify({ token: 'tok', repo: 'me/gym2', branch: 'main' })).toMatchObject({ ok: true });
   });
 
   it('moves a device from a gym repository to a gym folder of another repository without losing work (R4)', async () => {

@@ -109,6 +109,12 @@ export interface VerifyResult {
   branchExists?: boolean;
   /** set when a folder was given: whether the branch has files in it */
   folderExists?: boolean;
+  /**
+   * Set when no folder was given but gym lives in a folder of the repository (R4): the folder
+   * to use. Connecting is refused until a folder is set, so Slate never writes a second copy
+   * of journal/ and library/ at the repository root.
+   */
+  suggestedFolder?: string;
   tokenExpiry?: number;
   /** what failed, in words */
   error?: string;
@@ -270,6 +276,17 @@ export class SyncEngine {
         const inFolder = await remote.listTree(head.treeSha);
         if (!inFolder.length) return { ok: false, repo, branchExists: true, folderExists: false, tokenExpiry: expiry, error: `The folder "${folder}" does not exist on branch "${input.branch || 'main'}" of ${repo.fullName}.` };
         return { ok: true, repo, branchExists: true, folderExists: true, tokenExpiry: expiry };
+      }
+      const suggested = gymFolderOf((await remote.listTree(head.treeSha)).map((e) => e.path));
+      if (suggested) {
+        return {
+          ok: false,
+          repo,
+          branchExists: true,
+          suggestedFolder: suggested,
+          tokenExpiry: expiry,
+          error: `${repo.fullName} keeps gym in the folder "${suggested}". Set the folder to ${suggested} and connect again; without it Slate would write a second journal and library at the repository root.`,
+        };
       }
       return { ok: true, repo, branchExists: true, tokenExpiry: expiry };
     } catch (err) {
@@ -717,6 +734,22 @@ export class SyncEngine {
     this.st = emptyState();
     await db.del(stateKey(this.remote.id));
   }
+}
+
+/**
+ * R4: where gym lives in a repository connected without a folder. Returns null when the root
+ * holds gym (Slate's `journal/README.md` or `library/README.md` is at the root) or no folder
+ * does (a new gym repository); otherwise the shallowest folder holding Slate's data.
+ */
+export function gymFolderOf(paths: string[]): string | null {
+  const MARKERS = ['journal/README.md', 'library/README.md'];
+  if (paths.some((p) => MARKERS.includes(p))) return null;
+  const found = new Set<string>();
+  for (const p of paths) {
+    for (const m of MARKERS) if (p.endsWith(`/${m}`)) found.add(p.slice(0, -m.length - 1));
+  }
+  if (!found.size) return null;
+  return [...found].sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b))[0];
 }
 
 /** The owner-facing explanation of a sync failure. */
