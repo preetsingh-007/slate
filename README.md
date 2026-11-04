@@ -5,7 +5,7 @@ An infinite canvas for study work, with a library of books and clippings beside 
 ## First run
 
 1. Open `https://preetsingh-007.github.io/slate/`.
-2. Slate asks for your gym repository (`owner/name`), the branch (`main`) and a GitHub token, and shows how to make the token. In short: on github.com go to **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**; choose **Only select repositories** and pick only your gym repository; set **Contents** to **Read and write** (Metadata becomes read-only by itself); leave everything else at **No access**. Copy the token (`github_pat_…`) into Slate and choose **Verify and connect**.
+2. Slate asks for your gym repository (`owner/name`), the branch (`main`), the folder that holds gym when it is part of a larger repository (for example `gym` in a monorepo; leave it empty otherwise) and a GitHub token, and shows how to make the token. In short: on github.com go to **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**; choose **Only select repositories** and pick only your gym repository; set **Contents** to **Read and write** (Metadata becomes read-only by itself); leave everything else at **No access**. Copy the token (`github_pat_…`) into Slate and choose **Verify and connect**.
 3. Slate checks that the token can write to the repository and syncs for the first time. The token stays on this device; Slate warns 14 days before it expires and asks for a new one if GitHub rejects it, keeping every change meanwhile.
 
 **Continue offline without sync** skips this; connect later from **Settings → GitHub**.
@@ -30,7 +30,7 @@ The canvas and one side pane share the screen; drag the divider, swap sides, or 
 
 ## Sync
 
-Everything is saved on the device first. While online and connected, Slate pulls when it opens, when you return to it and every 20 seconds, and pushes about 20 seconds after you stop (at most 30 seconds after the first change) and when you leave the app; a change reaches your other devices within a minute. Devices that worked offline merge when they meet: canvases, to-dos and annotations are merged edit by edit, nothing is lost. The cloud button in the top bar shows the state (synced, syncing, offline, or the error and what to do) and warns when changes have waited more than a day. Slate writes only `journal/` and `library/` in the repository, in commits named `journal: …` and `library: …`.
+Everything is saved on the device first. While online and connected, Slate pulls when it opens, when you return to it and every 20 seconds, and pushes about 20 seconds after you stop (at most 30 seconds after the first change) and when you leave the app; a change reaches your other devices within a minute. Devices that worked offline merge when they meet: canvases, to-dos and annotations are merged edit by edit, nothing is lost. The cloud button in the top bar shows the state (synced, syncing, offline, or the error and what to do) and warns when changes have waited more than a day. Slate writes only `journal/` and `library/` in the repository, in commits named `journal: …` and `library: …`. When gym is a folder of a larger repository, Slate reads and writes only inside that folder: it writes `<folder>/journal/` and `<folder>/library/`, in commits named `<folder>/journal: …` and `<folder>/library: …`, and everything else in the repository is left alone. The token then has write access to the whole repository, so give it access to that repository only.
 
 ## The fetch helper (New from link)
 

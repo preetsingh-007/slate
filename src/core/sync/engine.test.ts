@@ -327,6 +327,81 @@ describe('authentication (R4)', () => {
     expect(a.sync.getStatus().phase).toBe('synced');
   });
 
+  it('syncs gym kept in a folder of a larger repository (R4, R5)', async () => {
+    const gh = new FakeGitHub();
+    const files = Object.fromEntries([...Object.entries(GYM_FILES).map(([p, v]) => [`gym/${p}`, v]), ['README.md', '# workspace\n'], ['slides/README.md', '# slides\n']]);
+    const repo = await gh.createRepo('me/ws', { tokens: ['tok'], files });
+    const a = await device(gh, 'a', { repo: 'me/ws', folder: 'gym' });
+    const b = await device(gh, 'b', { repo: 'me/ws', folder: 'gym' });
+    devices.push(a, b);
+
+    // verify finds the folder, or says it is missing
+    expect(await a.sync.verify({ token: 'tok', repo: 'me/ws', branch: 'main', folder: 'gym' })).toMatchObject({ ok: true, folderExists: true });
+    expect(await a.sync.verify({ token: 'tok', repo: 'me/ws', branch: 'main', folder: 'nope' })).toMatchObject({ ok: false, folderExists: false, error: expect.stringMatching(/folder "nope" does not exist/) });
+    expect(await a.sync.verify({ token: 'tok', repo: 'me/ws', branch: 'main', folder: '../x' })).toMatchObject({ ok: false, error: expect.stringMatching(/folder/) });
+
+    await a.draw([textBox('t1', T(21), 'Eigenvalues\n\n- [ ] prove the lemma')], [mark('m1', T(21, 11), 'note', ['t1'])]);
+    await a.sync.sync();
+    expect(repo.log()).toEqual(['gym/journal: Add main canvas', 'gym/library: Update settings', 'Initial commit']);
+    const paths = appPaths(repo);
+    expect(paths.length).toBeGreaterThan(5);
+    for (const p of paths) {
+      expect(p.startsWith('gym/'), p).toBe(true);
+      expect(isWritablePath(p.slice('gym/'.length)), p).toBe(true);
+    }
+    expect(text(repo.files().get('gym/journal/queue.md'))).toContain('- [m1](main/2026-10/marks/m1.md) · note');
+    expect(text(repo.files().get('README.md'))).toBe('# workspace\n');
+    expect(text(repo.files().get('slides/README.md'))).toBe('# slides\n');
+
+    // another device pulls the canvas; formalized.md and the gym mirror are read from the folder
+    await repo.commitFiles({ 'gym/journal/formalized.md': '# Formalized\n\n- m1 → ../math/linear-algebra/eigenvalues/notes.md#spectral-theorem · 2026-10-22\n' }, 'gym/journal: Record formalized marks');
+    await b.sync.sync();
+    await b.draw([]); // open the canvas: downloads the segment on demand (R9)
+    await b.canvases.model('main').load(['2026-10']);
+    expect(segText(b, 'main', '2026-10', 't1')).toContain('Eigenvalues');
+    expect(b.formalized.get('m1')).toMatchObject({ dismissed: false, path: 'math/linear-algebra/eigenvalues/notes.md' });
+    expect(await b.mirror.readText('math/linear-algebra/eigenvalues/notes.md')).toContain('# Eigenvalues');
+    expect(b.mirror.list().some((e) => e.path.startsWith('slides/') || e.path.startsWith('gym/'))).toBe(false);
+    await b.sync.sync();
+    expect(text(repo.files().get('gym/journal/queue.md'))).not.toContain('m1');
+  });
+
+  it('moves a device from a gym repository to a gym folder of another repository without losing work (R4)', async () => {
+    const { gh, repo: old, dev } = await setup();
+    const a = await dev('a');
+    await a.draw([textBox('t1', T(21), 'Eigenvalues\n\n- [ ] prove the lemma'), stroke('s1', T(21), 0, 100)], [mark('m1', T(21, 11), 'note', ['t1'])]);
+    await a.settings.update({ colors: ['#123456'] });
+    await a.sync.sync();
+    expect(a.sync.hasLocalChanges()).toBe(false);
+
+    // the gym repository is copied into gym/ of a monorepo (git subtree), then the device is pointed at it
+    const copied = Object.fromEntries([...old.files()].map(([p, v]) => [`gym/${p}`, v]));
+    const ws = await gh.createRepo('me/ws', { tokens: ['tok'], files: { ...copied, 'README.md': '# workspace\n', 'slides/README.md': '# slides\n' } });
+    const oldLog = old.log();
+    await a.settings.setSecrets({ repo: 'me/ws', folder: 'gym' });
+    await a.sync.sync();
+    expect(a.sync.getStatus()).toMatchObject({ phase: 'synced', needsToken: false });
+    expect(a.sync.hasLocalChanges()).toBe(false);
+
+    // nothing lost or rewritten: the canvas, settings and queue are as before, under gym/
+    for (const [p, v] of old.files()) expect(text(ws.files().get(`gym/${p}`)), p).toBe(text(v));
+    expect(ws.log()).toEqual(['Initial commit']);
+    expect(text(ws.files().get('slides/README.md'))).toBe('# slides\n');
+    expect(old.log()).toEqual(oldLog);
+
+    // new work goes to the monorepo only, and a fresh device sees everything
+    await a.draw([stroke('s2', T(22), 0, 300)]);
+    await a.sync.sync();
+    expect(ws.log()[0]).toBe('gym/journal: Update main canvas, 2026-10');
+    expect(old.log()).toEqual(oldLog);
+    const b = await dev('b', { repo: 'me/ws', folder: 'gym' });
+    await b.sync.sync();
+    await b.draw([]);
+    await b.canvases.model('main').load(['2026-10']);
+    expect(segText(b, 'main', '2026-10', 't1')).toContain('Eigenvalues');
+    expect(b.settings.get().colors).toEqual(['#123456']);
+  });
+
   it('shows syncing until the first run after start, then synced', async () => {
     const { dev } = await setup();
     const a = await dev('a');

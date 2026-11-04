@@ -22,7 +22,7 @@ import { readSegment, type SegmentContent } from './derived/segment';
 import { parseClippingMarkdown } from './derived/library';
 import { asSyncWrite } from '../stores/sharedKv';
 import { expiryMessage, expiryState } from './expiry';
-import { GITHUB_API, GitHubRemote, parseRepo } from './git/github';
+import { GITHUB_API, GitHubRemote, parseFolder, parseRepo } from './git/github';
 import { AuthError, ConflictError, GitRemoteError, NotFoundError, type RepoInfo } from './git/remote';
 import { LfsClient, lfsEndpoint, parseLfsPointer } from './lfs';
 import { pathForDoc, withDoc } from './local';
@@ -99,12 +99,16 @@ export interface ConnectInput {
   token: string;
   repo: string;
   branch: string;
+  /** folder of the repository that holds gym (R4); empty for the whole repository */
+  folder?: string;
 }
 
 export interface VerifyResult {
   ok: boolean;
   repo?: RepoInfo;
   branchExists?: boolean;
+  /** set when a folder was given: whether the branch has files in it */
+  folderExists?: boolean;
   tokenExpiry?: number;
   /** what failed, in words */
   error?: string;
@@ -209,6 +213,7 @@ export class SyncEngine {
       token: input.token,
       repo: input.repo,
       branch: input.branch,
+      folder: input.folder,
       baseUrl: this.apiBase(),
       fetch: this.deps.fetch,
       onTokenExpiry: (t) => void this.recordExpiry(t),
@@ -222,7 +227,11 @@ export class SyncEngine {
 
   private async configureFromSecrets() {
     const s = this.deps.settings.getSecrets();
-    const next = s.token && s.repo && parseRepo(s.repo) ? { token: s.token, repo: s.repo, branch: s.branch || 'main', apiBase: this.apiBase() } : null;
+    const folder = parseFolder(s.folder);
+    const next =
+      s.token && s.repo && parseRepo(s.repo) && folder !== null
+        ? { token: s.token, repo: s.repo, branch: s.branch || 'main', ...(folder ? { folder } : {}), apiBase: this.apiBase() }
+        : null;
     const same = JSON.stringify(next) === JSON.stringify(this.config);
     if (same) return;
     this.config = next;
@@ -247,13 +256,21 @@ export class SyncEngine {
   async verify(input: ConnectInput): Promise<VerifyResult> {
     if (!parseRepo(input.repo)) return { ok: false, error: 'Enter the repository as owner/name, for example octocat/gym.' };
     if (!input.token.trim()) return { ok: false, error: 'Enter the token.' };
+    const folder = parseFolder(input.folder);
+    if (folder === null) return { ok: false, error: 'Enter the folder as a path inside the repository, for example gym, or leave it empty.' };
     let expiry: number | undefined;
-    const remote = new GitHubRemote({ token: input.token.trim(), repo: input.repo, branch: input.branch || 'main', baseUrl: this.apiBase(), fetch: this.deps.fetch, onTokenExpiry: (t) => (expiry = t) });
+    const remote = new GitHubRemote({ token: input.token.trim(), repo: input.repo, branch: input.branch || 'main', folder, baseUrl: this.apiBase(), fetch: this.deps.fetch, onTokenExpiry: (t) => (expiry = t) });
     try {
       const repo = await remote.getRepo();
       if (!repo.canPush) return { ok: false, repo, tokenExpiry: expiry, error: 'The token can read the repository but not write to it. Give it "Contents: Read and write".' };
       const head = await remote.getHead();
       if (!head) return { ok: false, repo, branchExists: false, tokenExpiry: expiry, error: `The branch "${input.branch || 'main'}" does not exist in ${repo.fullName}.` };
+      if (folder) {
+        // R4: a folder must already hold gym; Slate never creates it in someone else's repository
+        const inFolder = await remote.listTree(head.treeSha);
+        if (!inFolder.length) return { ok: false, repo, branchExists: true, folderExists: false, tokenExpiry: expiry, error: `The folder "${folder}" does not exist on branch "${input.branch || 'main'}" of ${repo.fullName}.` };
+        return { ok: true, repo, branchExists: true, folderExists: true, tokenExpiry: expiry };
+      }
       return { ok: true, repo, branchExists: true, tokenExpiry: expiry };
     } catch (err) {
       return { ok: false, tokenExpiry: expiry, error: describeError(err) };
@@ -264,7 +281,7 @@ export class SyncEngine {
   async connect(input: ConnectInput): Promise<VerifyResult> {
     const r = await this.verify(input);
     if (!r.ok) return r;
-    await this.deps.settings.setSecrets({ token: input.token.trim(), repo: input.repo.trim(), branch: input.branch.trim() || 'main', tokenExpiry: r.tokenExpiry });
+    await this.deps.settings.setSecrets({ token: input.token.trim(), repo: input.repo.trim(), branch: input.branch.trim() || 'main', folder: parseFolder(input.folder) || undefined, tokenExpiry: r.tokenExpiry });
     await this.configureFromSecrets();
     this.start();
     await this.sync();

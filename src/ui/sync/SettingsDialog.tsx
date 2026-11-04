@@ -79,7 +79,7 @@ function GitHubSection() {
       <dl className="sync-facts">
         <dt>Repository</dt>
         <dd>
-          {secrets.repo} <span className="muted">· branch {secrets.branch || 'main'}</span>
+          {secrets.repo} <span className="muted">· branch {secrets.branch || 'main'}{secrets.folder ? ` · folder ${secrets.folder}` : ''}</span>
         </dd>
         <dt>Status</dt>
         <dd data-testid="settings-sync-status">{describeStatus(status)}</dd>

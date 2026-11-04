@@ -13,6 +13,8 @@ export interface DeviceSecrets {
   /** owner/name */
   repo?: string;
   branch?: string;
+  /** folder of the repository that holds gym, e.g. "gym" in a monorepo; absent for the whole repository */
+  folder?: string;
   /** expiry read from GitHub's response headers (ms), when known */
   tokenExpiry?: number;
   helperUrl?: string;

@@ -7,6 +7,9 @@
  *   (R8: history is never rewritten);
  * - every write passes the write-scope choke point first (R5);
  * - no repository creation or empty-repository bootstrap: the gym repository exists;
+ * - gym may be a folder of a larger repository (`folder`, R4): the remote then lists only that
+ *   folder, with paths relative to it, and writes under it, so the rest of the app keeps
+ *   working with gym-relative paths and the write scope (R5) is checked on those paths;
  * - the token's expiry is read from GitHub's response headers (R4).
  */
 import { assertWriteScope } from '../scope';
@@ -37,6 +40,11 @@ export interface GitHubRemoteOptions {
   /** "owner/name" */
   repo: string;
   branch: string;
+  /**
+   * Folder of the repository that holds gym (e.g. "gym" in a monorepo), normalised with
+   * `parseFolder`; empty or absent when gym is the whole repository.
+   */
+  folder?: string;
   /** API base; production always uses https://api.github.com (tests point it at a mock) */
   baseUrl?: string;
   /** parallel blob uploads/downloads. Default 4. */
@@ -75,6 +83,18 @@ export function parseRepo(input: string): { owner: string; name: string } | null
   return m ? { owner: m[1], name: m[2] } : null;
 }
 
+/**
+ * A repository folder from user input: '' for the whole repository, the normalised path
+ * ("gym", "areas/gym") otherwise, or null when it is not a plain relative folder path.
+ */
+export function parseFolder(input: string | undefined): string | null {
+  const s = (input ?? '').trim().replace(/^\/+|\/+$/g, '');
+  if (!s) return '';
+  const segs = s.split('/');
+  if (segs.some((seg) => !/^[A-Za-z0-9._-]+$/.test(seg) || seg === '.' || seg === '..')) return null;
+  return segs.join('/');
+}
+
 export class GitHubRemote implements GitRemote {
   readonly id: string;
   /** last observed rate-limit budget (for the UI) */
@@ -87,6 +107,8 @@ export class GitHubRemote implements GitRemote {
   private fetchFn: FetchLike;
   private sleep: (ms: number) => Promise<void>;
   private commitTrees = new Map<string, string>();
+  /** "<folder>/" or '' (whole repository) */
+  private prefix: string;
 
   constructor(private opts: GitHubRemoteOptions) {
     const parsed = parseRepo(opts.repo);
@@ -96,7 +118,16 @@ export class GitHubRemote implements GitRemote {
     this.base = (opts.baseUrl ?? GITHUB_API).replace(/\/+$/, '');
     this.fetchFn = opts.fetch ?? ((input, init) => fetch(input, init));
     this.sleep = opts.sleep ?? defaultSleep;
-    this.id = `github:${this.base}/${this.owner}/${this.name}#${opts.branch}`;
+    const folder = parseFolder(opts.folder);
+    if (folder === null) throw new Error('The folder must be a path inside the repository, such as "gym".');
+    this.prefix = folder ? `${folder}/` : '';
+    // the folder is part of the identity: local sync state is kept per repository, branch and folder
+    this.id = `github:${this.base}/${this.owner}/${this.name}#${opts.branch}${folder ? `:${folder}` : ''}`;
+  }
+
+  /** The gym folder ('' for the whole repository). */
+  get folder(): string {
+    return this.prefix.slice(0, -1);
   }
 
   get repoName(): string {
@@ -183,7 +214,15 @@ export class GitHubRemote implements GitRemote {
     return { commitSha, treeSha: await this.treeOf(commitSha) };
   }
 
+  /** Every blob of gym: the whole tree, or only the folder's entries with the folder prefix removed. */
   async listTree(treeSha: string): Promise<TreeEntry[]> {
+    const all = await this.listWholeTree(treeSha);
+    if (!this.prefix) return all;
+    const n = this.prefix.length;
+    return all.filter((e) => e.path.startsWith(this.prefix)).map((e) => ({ ...e, path: e.path.slice(n) }));
+  }
+
+  private async listWholeTree(treeSha: string): Promise<TreeEntry[]> {
     const out: TreeEntry[] = [];
     const r = await this.req<{ tree: RawTreeEntry[]; truncated: boolean }>('GET', `${this.repoPath}/git/trees/${treeSha}?recursive=1`);
     if (!r.data.truncated) {
@@ -245,9 +284,9 @@ export class GitHubRemote implements GitRemote {
     for (const c of commits) {
       const tree = await this.req<{ sha: string }>('POST', `${this.repoPath}/git/trees`, {
         base_tree: baseTree,
-        tree: c.files.map((f) => ({ path: f.path, mode: '100644', type: 'blob', sha: f.content ? shaOf.get(f.content)! : null })),
+        tree: c.files.map((f) => ({ path: this.prefix + f.path, mode: '100644', type: 'blob', sha: f.content ? shaOf.get(f.content)! : null })),
       });
-      const commit = await this.req<{ sha: string }>('POST', `${this.repoPath}/git/commits`, { message: c.message, tree: tree.data.sha, parents: [parent] });
+      const commit = await this.req<{ sha: string }>('POST', `${this.repoPath}/git/commits`, { message: this.scoped(c.message), tree: tree.data.sha, parents: [parent] });
       parent = commit.data.sha;
       baseTree = tree.data.sha;
       this.commitTrees.set(parent, baseTree);
@@ -260,6 +299,11 @@ export class GitHubRemote implements GitRemote {
   }
 
   // ---------------------------------------------------------------- helpers
+
+  /** In a folder, commit scopes are paths from the repository root: "journal: …" → "gym/journal: …". */
+  private scoped(message: string): string {
+    return this.prefix ? message.replace(/^(journal|library):/, `${this.prefix}$1:`) : message;
+  }
 
   private async treeOf(commitSha: string): Promise<string> {
     const hit = this.commitTrees.get(commitSha);

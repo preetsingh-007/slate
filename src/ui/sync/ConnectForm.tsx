@@ -57,6 +57,7 @@ export function VerifyChecks({ result }: { result: VerifyResult }) {
       {result.repo ? <Check ok>Repository {result.repo.fullName} found</Check> : <Check ok={false}>Repository not reachable with this token</Check>}
       {result.repo && <Check ok={result.repo.canPush}>{result.repo.canPush ? 'The token can write to it' : 'The token cannot write to it'}</Check>}
       {result.branchExists !== undefined && <Check ok={result.branchExists}>{result.branchExists ? 'Branch found' : 'Branch not found'}</Check>}
+      {result.folderExists !== undefined && <Check ok={result.folderExists}>{result.folderExists ? 'Folder found' : 'Folder not found'}</Check>}
       {result.ok && (
         <li className="note">{result.tokenExpiry ? `The token expires on ${new Date(result.tokenExpiry).toLocaleDateString(undefined, { dateStyle: 'medium' })}.` : 'GitHub did not report an expiry date; you can enter it in Settings.'}</li>
       )}
@@ -69,6 +70,7 @@ export function ConnectForm({ onConnected, submitLabel = 'Verify and connect', a
   const secrets = settings.getSecrets();
   const [repo, setRepo] = useState(secrets.repo ?? '');
   const [branch, setBranch] = useState(secrets.branch ?? 'main');
+  const [folder, setFolder] = useState(secrets.folder ?? '');
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<VerifyResult | null>(null);
@@ -78,7 +80,7 @@ export function ConnectForm({ onConnected, submitLabel = 'Verify and connect', a
     setBusy(true);
     setResult(null);
     try {
-      const r = await sync.connect({ token: token.trim(), repo: repo.trim(), branch: branch.trim() || 'main' });
+      const r = await sync.connect({ token: token.trim(), repo: repo.trim(), branch: branch.trim() || 'main', folder: folder.trim() });
       setResult(r);
       if (r.ok) {
         setToken('');
@@ -100,6 +102,10 @@ export function ConnectForm({ onConnected, submitLabel = 'Verify and connect', a
       <label className="field">
         <span>Branch</span>
         <input type="text" name="branch" value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" autoComplete="off" autoCapitalize="none" spellCheck={false} />
+      </label>
+      <label className="field">
+        <span>Folder (only when gym is a folder of a larger repository)</span>
+        <input type="text" name="folder" value={folder} onChange={(e) => setFolder(e.target.value)} placeholder="whole repository" autoComplete="off" autoCapitalize="none" spellCheck={false} />
       </label>
       <label className="field">
         <span>Fine-grained personal access token</span>

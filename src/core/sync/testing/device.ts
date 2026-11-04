@@ -36,7 +36,7 @@ export interface TestDevice {
 export async function device(
   gh: FakeGitHub,
   name: string,
-  opts: { token?: string; repo?: string; connect?: boolean; timings?: Partial<SyncTimings>; now?: () => number } = {},
+  opts: { token?: string; repo?: string; folder?: string; connect?: boolean; timings?: Partial<SyncTimings>; now?: () => number } = {},
 ): Promise<TestDevice> {
   const db = await SlateDB.open(`sync-test-${name}-${Date.now()}-${n++}`);
   const docs = new DocStore(db);
@@ -46,7 +46,7 @@ export async function device(
   const library = await LibraryStore.open(db);
   const formalized = await FormalizedStore.open(db);
   const mirror = await IdbGymFiles.open(db);
-  if (opts.connect !== false) await settings.setSecrets({ token: opts.token ?? 'tok', repo: opts.repo ?? 'me/gym', branch: 'main' });
+  if (opts.connect !== false) await settings.setSecrets({ token: opts.token ?? 'tok', repo: opts.repo ?? 'me/gym', branch: 'main', folder: opts.folder });
   const sync = new SyncEngine(
     { db, docs, assets, settings, canvases, library, formalized, mirror, rasterize: stubRasterizer, fetch: gh.fetch, now: opts.now },
     { apiBase: API, timings: { ensureTimeoutMs: 5000, ...(opts.timings ?? {}) } },

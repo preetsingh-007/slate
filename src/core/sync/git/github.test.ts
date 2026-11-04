@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GitHubRemote, parseRepo } from './github';
+import { GitHubRemote, parseFolder, parseRepo } from './github';
 import { AuthError, ConflictError, GitRemoteError, NotFoundError, RemoteFileTooLargeError, base64ToBytes, bytesToBase64, gitBlobSha } from './remote';
 import { mockFetch, type MockReply } from './testFetch';
 import { FakeGitHub } from './fakeGitHub';
@@ -220,5 +220,64 @@ describe('GitHubRemote against the in-memory GitHub', () => {
 
     const bad = new GitHubRemote({ token: 'bad', repo: 'me/gym', branch: 'main', fetch: gh.fetch });
     await expect(bad.getHead()).rejects.toBeInstanceOf(AuthError);
+  });
+});
+
+describe('GitHubRemote in a folder of a larger repository (R4, R5)', () => {
+  const MONOREPO = {
+    'README.md': '# workspace\n',
+    'gym/README.md': '# gym\n',
+    'gym/math/README.md': '# Math\n',
+    'gym/journal/queue.md': '# Queue\n',
+    'slides/README.md': '# slides\n',
+  };
+
+  it('parses folders: trims slashes, rejects anything but a plain relative path', () => {
+    expect(parseFolder(undefined)).toBe('');
+    expect(parseFolder('  ')).toBe('');
+    expect(parseFolder('gym')).toBe('gym');
+    expect(parseFolder('/gym/')).toBe('gym');
+    expect(parseFolder('areas/gym')).toBe('areas/gym');
+    for (const bad of ['..', 'gym/..', 'a//b', 'gym\\x', 'g ym', './gym']) expect(parseFolder(bad), bad).toBeNull();
+    expect(() => new GitHubRemote({ token: 't', repo: 'me/ws', branch: 'main', folder: '../x' })).toThrow(/folder/);
+  });
+
+  it('lists only the folder, relative to it, and keeps the identity per folder', async () => {
+    const gh = new FakeGitHub();
+    await gh.createRepo('me/ws', { tokens: ['good'], files: MONOREPO });
+    const remote = new GitHubRemote({ token: 'good', repo: 'me/ws', branch: 'main', folder: '/gym/', fetch: gh.fetch });
+    const head = (await remote.getHead())!;
+    expect((await remote.listTree(head.treeSha)).map((e) => e.path).sort()).toEqual(['README.md', 'journal/queue.md', 'math/README.md']);
+    expect(remote.folder).toBe('gym');
+    expect(remote.id).toBe('github:https://api.github.com/me/ws#main:gym');
+    expect(new GitHubRemote({ token: 'good', repo: 'me/ws', branch: 'main', fetch: gh.fetch }).id).toBe('github:https://api.github.com/me/ws#main');
+  });
+
+  it('writes under the folder with root-relative commit scopes, leaving the rest of the repository alone', async () => {
+    const gh = new FakeGitHub();
+    const repo = await gh.createRepo('me/ws', { tokens: ['good'], files: MONOREPO });
+    const remote = new GitHubRemote({ token: 'good', repo: 'me/ws', branch: 'main', folder: 'gym', fetch: gh.fetch });
+    const head = (await remote.getHead())!;
+    await remote.commit(
+      [
+        { message: 'library: Add settings', files: [{ path: 'library/settings.json', content: bytes('{}\n') }] },
+        { message: 'journal: Update queue\n\nbody', files: [{ path: 'journal/queue.md', content: bytes('# Queue\n\n- x\n') }] },
+      ],
+      head.commitSha,
+    );
+    expect(repo.log()).toEqual(['gym/journal: Update queue\n\nbody', 'gym/library: Add settings', 'Initial commit']);
+    expect(repo.text('gym/journal/queue.md')).toBe('# Queue\n\n- x\n');
+    expect(repo.text('gym/library/settings.json')).toBe('{}\n');
+    expect(repo.files().has('library/settings.json')).toBe(false);
+    for (const [p, v] of Object.entries(MONOREPO)) if (p !== 'gym/journal/queue.md') expect(repo.text(p), p).toBe(v);
+  });
+
+  it('checks the write scope on folder-relative paths before sending anything (R5)', async () => {
+    const { fetch, calls } = mockFetch([]);
+    const gh = new GitHubRemote({ token: 't', repo: 'me/ws', branch: 'main', folder: 'gym', fetch });
+    for (const path of ['README.md', '../slides/README.md', 'gym/journal/x.md', 'journal/../../README.md', 'journal/formalized.md']) {
+      await expect(gh.commit([{ message: 'journal: x', files: [{ path, content: bytes('x') }] }], 'p')).rejects.toBeInstanceOf(WriteScopeError);
+    }
+    expect(calls).toHaveLength(0);
   });
 });
